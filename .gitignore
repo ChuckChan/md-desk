@@ -1,0 +1,21 @@
+# Build artifacts (large, regenerated)
+build/
+dist/
+*.spec
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Distribution zip (uploaded as GitHub Release asset, not committed)
+*.zip
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local trash / temp
+_dist_verify/
