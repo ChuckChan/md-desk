@@ -6,7 +6,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 ## 下载与运行
 
-- 前往 **Releases** 下载 `MdDesk-v0.1.0-Windows-x64.zip`
+- 前往 **Releases** 下载 `MdDesk-v0.2-Windows-x64.zip`
 - 解压后**整个文件夹**一起拷贝到目标机器
 - 双击 `md-desk.exe` 启动
 
@@ -24,7 +24,8 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 - 预览区使用 Qt 原生 Markdown 渲染：GFM 表格、任务列表等扩展语法不会渲染为表格 / 勾选框，会以原始文本显示（复制 / 导出的是标准 Markdown 源码，不受影响）。
 - 未做代码签名；首次运行可能被 Windows SmartScreen / 杀软拦截（文件属性「解除锁定」或加白名单即可，非阻塞）。
-- v0.1.0 不含：OCR、LLM 增强、并发转换、原文件预览、主题切换。
+- v0.2 新增：Outlook `.msg`、安全的远程 http/https URL 输入、YouTube 字幕提取、音频转写（Google 在线识别，需联网）、高级设置（字幕语言 / 输入探测覆盖）。
+- v0.2 不含：OCR、LLM 增强、并发转换、原文件预览、主题切换。
 - 仅支持 Windows x64。
 
 ## 开发

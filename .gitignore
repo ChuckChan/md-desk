@@ -19,3 +19,6 @@ Thumbs.db
 
 # Local trash / temp
 _dist_verify/
+
+# Build / test logs (regenerated, never committed)
+*.log

@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Distribution ZIP builder for MdDesk v0.1.0.
+"""Distribution ZIP builder for MdDesk v0.2.
 
 Packs the full frozen app directory + RELEASE.md + README.txt into a single
 top-level folder inside the ZIP. Pure stdlib, no external deps.
@@ -11,8 +11,8 @@ BASE = r"D:\WB\2026-08-16-02-02-20\markitdown-gui"
 SRC_DIST = os.path.join(BASE, "dist", "md-desk")
 RELEASE_MD = os.path.join(BASE, "RELEASE.md")
 README_TXT = os.path.join(BASE, "README.txt")
-OUT = os.path.join(BASE, "MdDesk-v0.1.0-Windows-x64.zip")
-ROOT = "MdDesk-v0.1.0"
+OUT = os.path.join(BASE, "MdDesk-v0.2-Windows-x64.zip")
+ROOT = "MdDesk-v0.2"
 
 
 def add_dir(zf, path, arcroot):

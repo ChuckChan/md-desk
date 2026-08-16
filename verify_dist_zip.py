@@ -7,8 +7,8 @@ import hashlib
 import subprocess
 
 BASE = r"D:\WB\2026-08-16-02-02-20\markitdown-gui"
-ZIP = os.path.join(BASE, "MdDesk-v0.1.0-Windows-x64.zip")
-ROOT = "MdDesk-v0.1.0"
+ZIP = os.path.join(BASE, "MdDesk-v0.2-Windows-x64.zip")
+ROOT = "MdDesk-v0.2"
 EXTRACT = r"D:\_dist_verify"
 EXE = os.path.join(EXTRACT, ROOT, "md-desk", "md-desk.exe")
 INTERNAL = os.path.join(EXTRACT, ROOT, "md-desk", "_internal")

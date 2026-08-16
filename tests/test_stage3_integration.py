@@ -50,7 +50,8 @@ def test_error_written():
     w.show()
     w._model.add_paths([str(TEST_INPUT)])
     # converter wraps raw exceptions into ConversionError; simulate that contract.
-    with patch("src.worker.convert_file",
+    # The worker dispatches via src.worker.convert_entry (Stage 3+ API).
+    with patch("src.worker.convert_entry",
                side_effect=ConversionError(FileStatus.ERROR, "boom")):
         w.start_conversion()
         _run_batch(w)

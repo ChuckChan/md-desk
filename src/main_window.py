@@ -29,9 +29,12 @@ from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHeaderView,
+    QHBoxLayout,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QPushButton,
     QSplitter,
     QStatusBar,
     QTabWidget,
@@ -42,8 +45,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .advanced_settings_dialog import AdvancedSettingsDialog
 from .file_entry import FileStatus
 from .file_model import FileModel
+from .settings import Settings
 from .worker import ConversionWorker
 
 
@@ -115,6 +120,9 @@ class MainWindow(QMainWindow):
         self._worker: ConversionWorker | None = None
         self._converting = False
         self._current_row: int | None = None
+        # Stage 4: load persisted settings (first start -> defaults; corrupt ->
+        # defaults). Never raises.
+        self._settings = Settings.load()
         self._build_layout()
         self._show_entry(None)
         self._update_status()
@@ -141,6 +149,17 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(panel)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # Minimal URL entry (Stage 2): a single line + "添加 URL" button.
+        url_row = QHBoxLayout()
+        self._url_edit = QLineEdit()
+        self._url_edit.setPlaceholderText("粘贴 http/https 链接，例如 https://example.com/page.html")
+        self._url_edit.returnPressed.connect(self._on_add_url)
+        self._act_add_url = QPushButton("添加 URL")
+        self._act_add_url.clicked.connect(self._on_add_url)
+        url_row.addWidget(self._url_edit, 1)
+        url_row.addWidget(self._act_add_url)
+        layout.addLayout(url_row)
+
         toolbar = QToolBar()
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self._act_add = toolbar.addAction("添加文件")
@@ -151,6 +170,8 @@ class MainWindow(QMainWindow):
         self._act_clear.triggered.connect(self._on_clear)
         self._act_convert = toolbar.addAction("开始转换")
         self._act_convert.triggered.connect(self.start_conversion)
+        self._act_advanced = toolbar.addAction("高级设置")
+        self._act_advanced.triggered.connect(self._on_advanced_settings)
 
         self._table = FileTableView()
         self._table.setModel(self._model)
@@ -160,6 +181,20 @@ class MainWindow(QMainWindow):
         layout.addWidget(toolbar)
         layout.addWidget(self._table, 1)
         return panel
+
+    # ---- URL entry (Stage 2) ----
+    def _on_add_url(self) -> None:
+        if self._converting:
+            return
+        url = self._url_edit.text().strip()
+        if not url:
+            return
+        added, _ = self._model.add_url(url)
+        if added:
+            self._url_edit.clear()
+            self._update_status()
+        else:
+            QMessageBox.warning(self, "无法添加链接", "仅支持 http/https 链接，且不能重复添加。")
 
     # ---- handlers ----
     def _on_add_files(self) -> None:
@@ -191,6 +226,24 @@ class MainWindow(QMainWindow):
         self._model.clear()
         self._update_status()
 
+    # ---- advanced settings (Stage 4) ----
+    def _on_advanced_settings(self) -> None:
+        if self._converting:
+            return
+        # Operate on the currently selected entry, if any.
+        entry = self._model.entry_at(self._current_row) if self._current_row is not None else None
+        dialog = AdvancedSettingsDialog(self._settings, entry, self)
+        if dialog.exec() == AdvancedSettingsDialog.DialogCode.Accepted:
+            # If the user changed the selected entry's override, mark it as
+            # needing re-conversion so the stale result is not shown as DONE.
+            if entry is not None and entry.stream_info_override is not None:
+                self._model.set_status(self._current_row, FileStatus.WAITING)
+                e = self._model.entry_at(self._current_row)
+                if e is not None:
+                    e.markdown = None
+                    e.error_message = None
+                self._show_entry(self._current_row)
+
     # ---- conversion (Stage 3) ----
     def start_conversion(self) -> None:
         """Convert every file in the list, sequentially, in a worker thread.
@@ -201,12 +254,12 @@ class MainWindow(QMainWindow):
         if self._converting or self._model.rowCount() == 0:
             return
         total = self._model.rowCount()
-        tasks = [(row, self._model.entry_at(row).path) for row in range(total)]
+        tasks = [(row, self._model.entry_at(row)) for row in range(total)]
 
         self._set_converting(True)
         self.statusBar().showMessage(f"准备转换 {total} 个文件…")
 
-        self._worker = ConversionWorker(tasks)
+        self._worker = ConversionWorker(tasks, settings=self._settings)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.file_failed.connect(self._on_file_failed)
@@ -244,8 +297,10 @@ class MainWindow(QMainWindow):
 
     def _set_converting(self, on: bool) -> None:
         self._converting = on
-        for act in (self._act_add, self._act_remove, self._act_clear, self._act_convert):
+        for act in (self._act_add, self._act_remove, self._act_clear, self._act_convert, self._act_advanced):
             act.setEnabled(not on)
+        self._url_edit.setEnabled(not on)
+        self._act_add_url.setEnabled(not on)
 
     # ---- right panel: source / preview (Stage 4) ----
     def _build_content_panel(self) -> QWidget:
@@ -330,7 +385,8 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(self, "导出 Markdown", default_name, "Markdown 文件 (*.md)")
         if not path:
             return  # user cancelled
-        if os.path.abspath(path) == os.path.abspath(entry.path):
+        # URL-backed entries have no local source file to overwrite.
+        if not entry.is_url and os.path.abspath(path) == os.path.abspath(entry.path):
             self.statusBar().showMessage("不能覆盖源文件")
             return
         try:

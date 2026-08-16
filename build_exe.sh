@@ -2,6 +2,14 @@
 set -u
 cd "D:/WB/2026-08-16-02-02-20/markitdown-gui" || exit 1
 PYI="D:/WB/markitdown_packaging_venv/Scripts/pyinstaller.exe"
+PIP="D:/WB/markitdown_packaging_venv/Scripts/python.exe -m pip"
+
+# Reproducible build baseline (Stage 0/1B): ensure the declared build
+# dependencies are present in the packaging venv before freezing. This pulls
+# in `olefile` via `markitdown[outlook]` and pins markitdown/PySide6/PyInstaller.
+"$PIP" install -r requirements.txt || {
+  echo "WARN: pip install -r requirements.txt failed; continuing with current venv state" >&2
+}
 "$PYI" \
   --name md-desk \
   --onedir --windowed --noconfirm \
@@ -13,6 +21,7 @@ PYI="D:/WB/markitdown_packaging_venv/Scripts/pyinstaller.exe"
   --hidden-import bs4 --hidden-import markdownify --hidden-import defusedxml --hidden-import magika \
   --hidden-import charset_normalizer --hidden-import lxml --hidden-import requests --hidden-import PIL \
   --hidden-import cryptography --hidden-import cffi --hidden-import numpy \
+  --hidden-import pydub --hidden-import speech_recognition \
   --exclude-module PySide6.QtNetwork --exclude-module PySide6.QtPdf --exclude-module PySide6.QtPdfWidgets \
   --exclude-module PySide6.QtQml --exclude-module PySide6.QtQuick --exclude-module PySide6.QtQuickWidgets --exclude-module PySide6.QtQuick3D \
   --exclude-module PySide6.Qt3DAnimation --exclude-module PySide6.Qt3DCore --exclude-module PySide6.Qt3DExtras --exclude-module PySide6.Qt3DInput --exclude-module PySide6.Qt3DLogic --exclude-module PySide6.Qt3DRender \

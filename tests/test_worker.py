@@ -24,8 +24,21 @@ def _check(name, cond, detail=""):
     return cond
 
 
+class _DummyEntry:
+    """Stand-in for a FileEntry: the worker only forwards it to
+    ``convert_entry``, which is fully mocked in these tests."""
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        self.url = None
+
+
 def _run(tasks, fake):
-    """Run a worker to completion, flush queued signals, return collectors."""
+    """Run a worker to completion, flush queued signals, return collectors.
+
+    The worker dispatches via ``src.converter.convert_entry`` (Stage 3+ API),
+    so that is what we mock here.
+    """
     app = QApplication.instance() or QApplication([])
     started, done, failed, progress = [], [], [], []
     w = ConversionWorker(tasks)
@@ -33,7 +46,7 @@ def _run(tasks, fake):
     w.file_done.connect(lambda r, m: done.append((r, m)))
     w.file_failed.connect(lambda r, s, e: failed.append((r, s, e)))
     w.progress.connect(lambda d, t: progress.append((d, t)))
-    with patch("src.worker.convert_file", side_effect=fake):
+    with patch("src.worker.convert_entry", side_effect=fake):
         w.start()
         w.wait()
     app.processEvents()
@@ -41,10 +54,10 @@ def _run(tasks, fake):
 
 
 def test_sequential():
-    tasks = [(0, "a.html"), (1, "b.html"), (2, "c.html")]
+    tasks = [(0, _DummyEntry("a.html")), (1, _DummyEntry("b.html")), (2, _DummyEntry("c.html"))]
 
-    def fake(path):
-        return f"# {path}"
+    def fake(entry, settings=None):
+        return f"# {entry.path}"
 
     started, done, failed, progress = _run(tasks, fake)
     ok = True
@@ -54,14 +67,14 @@ def test_sequential():
 
 
 def test_status_mapping():
-    tasks = [(0, "ok.html"), (1, "bad.unknown"), (2, "err.pdf")]
+    tasks = [(0, _DummyEntry("ok.html")), (1, _DummyEntry("bad.unknown")), (2, _DummyEntry("err.pdf"))]
 
-    def fake(path):
-        # Mimic converter.convert_file's contract: raise ConversionError
+    def fake(entry, settings=None):
+        # Mimic converter.convert_entry's contract: raise ConversionError
         # (the real converter wraps raw markitdown exceptions itself).
-        if path.endswith("unknown"):
+        if entry.path.endswith("unknown"):
             raise ConversionError(FileStatus.UNSUPPORTED, "不支持")
-        if path.endswith("err.pdf"):
+        if entry.path.endswith("err.pdf"):
             raise ConversionError(FileStatus.ERROR, "bad")
         return "# ok"
 
@@ -76,9 +89,9 @@ def test_status_mapping():
 
 
 def test_progress():
-    tasks = [(i, f"f{i}.html") for i in range(4)]
+    tasks = [(i, _DummyEntry(f"f{i}.html")) for i in range(4)]
 
-    def fake(path):
+    def fake(entry, settings=None):
         return "# x"
 
     started, done, failed, progress = _run(tasks, fake)

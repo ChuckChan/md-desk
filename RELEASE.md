@@ -1,31 +1,34 @@
-# MdDesk v0.1.0 — Release
+# MdDesk v0.2 — Release
 
 **状态：** 已发布（Release）
-**日期：** 2026-08-16
+**日期：** 2026-08-17
 **构建方式：** PyInstaller 6.22.1 单目录打包（onedir + windowed），自包含运行环境。
-  转换引擎基于 Microsoft MarkItDown（本工具为其非官方 GUI 封装，无关联）。
+  转换引擎基于 Microsoft MarkItDown 0.1.7（本工具为其非官方 GUI 封装，无关联；引擎版本锁定，不升级）。
+
+## 相较 v0.1.0 新增能力
+
+- **Outlook `.msg` 邮件转换**（依赖 `olefile`，由 `markitdown[outlook]` 引入）
+- **安全的远程 http/https URL 输入**：自研 `UrlFetchService`（纯 stdlib）做 SSRF / 重定向 / 超时 / 体积防护，连接 PIN 到已校验 IP 防 DNS rebinding；**禁用 `MarkItDown.convert_uri()`**
+- **YouTube 字幕提取**（`youtube-transcript-api`，可在高级设置选择字幕语言）
+- **音频转写**：调用 Google 在线语音识别（需联网）；WAV 免 FFmpeg，MP3/M4A/MP4 需系统 FFmpeg（不打包）
+- **高级设置**：YouTube 字幕语言 + 单文件输入探测覆盖（扩展名 / MIME / 字符集 / 文件名）
 
 ## 验收结论
 
-Stage 7 验收全部 MUST 项通过（13/13 回归检查 PASS）：
+v0.2 测试矩阵全部 PASS（13 个测试脚本，共 185 项断言），`verify_dist_zip.py` 三关全过：
 
-- ✅ 不依赖 Python 解释器
-- ✅ 不依赖源码目录（中性目录独立启动）
-- ✅ 双击 `.exe` 可启动（offscreen 启动存活，零 stderr）
-- ✅ 拖拽文件正常 + 选择文件正常 + 重复文件去重
-- ✅ PDF / DOCX / XLSX 至少各 1 个转换成功（=DONE）
-- ✅ 批量转换正常
-- ✅ Markdown 源码查看正常（`_source_view` 只读展示）
-- ✅ 渲染预览正常（`QTextBrowser.setMarkdown()` toHtml 非空）
-- ✅ 复制正常（`_act_copy` 随 DONE 启用，剪贴板无异常）
-- ✅ 导出 `.md` 正常（UTF-8 写出，取消导出无异常）
-- ✅ 错误文件不崩溃：损坏 PDF → ERROR、随机二进制 → UNSUPPORTED
-- ✅ 关闭后可再次正常启动（relaunch）
+- **源码测试矩阵**（packaging venv，offscreen）：converter(9) / worker(10) / stage3_integration(8) / regression_formats(13) / advanced_settings(20) / file_model(12) / msg_stage1b(8) / tls_stage2(9) / url_stage2(42) / audio_stage5(13) / url_native_stage3(11) / stage4(16) / stage5(14)，全部 rc=0、0 FAIL。
+  - 注：`test_tls_stage2` 原有一处误报（grep 模式 `environ` 命中 `src/settings.py` 中合法的 `os.environ.get("APPDATA")` 配置目录定位），已将其扫描模式收窄为 `ALLOW_HOSTS|allow_hosts`（仅限测试修正，不动产品代码），复跑 9/9 PASS。产品代码无任何 allow_hosts 启用钩子。
+- **EXE 构建**：`build_exe.sh` 干净重建，`PYINSTALLER_EXIT=0`；真实 `md-desk.exe`（16.5MB）offscreen 启动存活、无 traceback（仅 pydub 关于系统未安装 FFmpeg 的良性 RuntimeWarning，音频功能缺失时优雅降级）。
+- **分发校验 `verify_dist_zip.py`**：EXTRACT_OK / STRUCTURE_OK（exe + `_internal` + RELEASE.md + README.txt）/ BOOT_OK（offscreen 启动存活）全部 PASS。
+- **分发包**：`MdDesk-v0.2-Windows-x64.zip`，137,636,508 字节，SHA-256 `144f61f77ac736f6d5592e23c19c578da37d676da39ec05a3b281ea19400b1df`，顶层目录 `MdDesk-v0.2`。
 
 ## 运行时依赖
 
 - VC Runtime 已内嵌（`VCRUNTIME140.dll` + `VCRUNTIME140_1.dll`），无需单独安装 VC Redist。
 - Qt 平台插件 `qwindows.dll` 已随包发布。
+- 音频转写依赖 Google 在线 SR（需联网）；MP3/M4A/MP4 需系统 FFmpeg（不打包，缺失时给出友好提示而非崩溃）。
+- YouTube 字幕网络请求不经过 MdDesk 的 `UrlFetchService` 安全层（遵循上游 markitdown 实现）。
 
 ## 已知非阻塞事项
 
@@ -33,10 +36,11 @@ Stage 7 验收全部 MUST 项通过（13/13 回归检查 PASS）：
 
 ## 交付物
 
-- 可执行目录：`dist/md-desk/`（13.7 MB 启动器 + 223 MB 自包含目录，需整目录拷贝）
-- 回归验证脚本：`_acceptance_test.py`（13 项检查）
+- 可执行目录：`dist/md-desk/`（启动器 + 自包含 `_internal/` 目录，需整目录拷贝）
+- 回归验证脚本：`tests/` 下全套源码测试 + `tests/exe_*_smoke.py` 冻结烟雾测试
 - 构建脚本：`build_exe.sh`
+- 分发包：`MdDesk-v0.2-Windows-x64.zip`（顶层目录 `MdDesk-v0.2`）
 
-## 范围说明（v0.1.0 不做）
+## 范围说明（v0.2 不做）
 
-OCR / LLM / 并发 / 原文件预览 / 主题切换 / 新 UI —— 均不在本版本范围内。
+OCR / LLM 图片描述 / 并发转换 / 原文件预览 / 主题切换 / 插件系统 / Azure DI·CU / exiftool —— 均不在本版本范围内。

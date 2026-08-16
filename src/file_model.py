@@ -7,6 +7,7 @@ Must NOT touch MarkItDown, conversion threads, or file content.
 
 from pathlib import Path
 import os
+from urllib.parse import urlparse
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtWidgets import QApplication
@@ -97,6 +98,35 @@ class FileModel(QAbstractTableModel):
             self._entries.extend(new_entries)
             self.endInsertRows()
         return added, skipped
+
+    def add_url(self, url: str) -> tuple[int, int]:
+        """Add a remote http/https URL entry. Dedup by URL string.
+
+        Returns (added, skipped). Rejects empty / non-http(s) URLs and
+        duplicates. Full security validation happens later in UrlFetchService
+        at conversion time; this only performs the lightweight scheme gate.
+        """
+        u = (url or "").strip()
+        if not u:
+            return 0, 1
+        try:
+            scheme = urlparse(u).scheme.lower()
+        except Exception:
+            scheme = ""
+        if scheme not in ("http", "https"):
+            return 0, 1
+        if u in self._paths:
+            return 0, 1
+        try:
+            entry = FileEntry.from_url(u)
+        except Exception:
+            return 0, 1
+        start = len(self._entries)
+        self.beginInsertRows(QModelIndex(), start, start)
+        self._entries.append(entry)
+        self._paths.add(entry.norm_path)
+        self.endInsertRows()
+        return 1, 0
 
     def removeRows(self, row: int, count: int, parent: QModelIndex = QModelIndex()) -> bool:
         if parent.isValid() or count <= 0 or row < 0 or row + count > len(self._entries):

@@ -1,0 +1,38 @@
+# MdDesk reproducible build baseline (Stage 0/1B)
+#
+# Purpose: pin the DIRECT build dependencies of MdDesk so the Windows EXE
+# build is reproducible. Transitive deps (pdfminer.six, mammoth, magika,
+# openpyxl, python-pptx, python-docx, pandas, ...) are resolved by
+# markitdown==0.1.7's own pinned metadata and need not be listed here.
+#
+# Build environment (resolved, captured at Stage 1B):
+#   OS        : Windows x64
+#   Python    : 3.13.14 (CPython)
+#   PyInstaller: 6.22.1
+#
+# Install into the packaging venv before building:
+#   python -m pip install -r requirements.txt
+# then run build_exe.sh
+#
+# NOTE: markitdown[outlook] pulls in `olefile`, which is REQUIRED for
+# Outlook .msg conversion. This extra keeps production MarkItDown locked
+# at 0.1.7 (do NOT upgrade to main or >0.1.7).
+#
+# Stage 3B: added the official `youtube-transcription` extra so the
+# YouTube converter's transcript capability is enabled. The extra itself
+# declares `youtube-transcript-api` WITHOUT a version pin, so we pin the
+# exact version verified working with markitdown 0.1.7's converter
+# (1.2.4 keeps the `YouTubeTranscriptApi().list()/.fetch()` instance API
+# the converter calls). This is a reproducibility pin, NOT a workaround
+# for an incompatibility -- 1.2.4 is fully compatible.
+#
+# Stage 5: added the official `audio-transcription` extra (pulls in
+# `pydub` + `SpeechRecognition`). Transcription calls Google's ONLINE
+# Speech Recognition API (recognize_google) -> requires network. MP3/M4A/MP4
+# additionally need an external FFmpeg binary (NOT bundled; see plan §15 /
+# Stage5_Evidence). WAV/aiff/flac need neither extra binary nor FFmpeg.
+
+markitdown[outlook,youtube-transcription,audio-transcription]==0.1.7
+youtube-transcript-api==1.2.4
+PySide6_Essentials==6.11.1
+pyinstaller==6.22.1

@@ -10,7 +10,9 @@ Task shape: list of (row_index, file_path).
 
 from PySide6.QtCore import QThread, Signal
 
-from .converter import ConversionError, convert_file
+from .converter import ConversionError, convert_entry
+from .file_entry import FileEntry
+from .settings import Settings
 
 
 class ConversionWorker(QThread):
@@ -21,19 +23,26 @@ class ConversionWorker(QThread):
     progress = Signal(int, int)                # (done, total)
     batch_finished = Signal(int, int)          # (success_count, fail_count)
 
-    def __init__(self, tasks: list[tuple[int, str]]) -> None:
+    def __init__(
+        self,
+        tasks: list[tuple[int, FileEntry]],
+        settings: Settings | None = None,
+    ) -> None:
         super().__init__()
         self._tasks = list(tasks)
+        self._settings = settings
         self._success = 0
         self._failed = 0
 
     def run(self) -> None:  # executed in the worker thread
         total = len(self._tasks)
         done = 0
-        for row, path in self._tasks:
+        for row, entry in self._tasks:
             self.file_started.emit(row)
             try:
-                markdown = convert_file(path)
+                # Network access (URL entries) happens here, OFF the GUI
+                # thread, so the UI stays responsive.
+                markdown = convert_entry(entry, settings=self._settings)
                 self.file_done.emit(row, markdown)
                 self._success += 1
             except ConversionError as exc:
