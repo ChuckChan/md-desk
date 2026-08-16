@@ -6,7 +6,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 ## 下载与运行
 
-- 前往 **Releases** 下载 `MdDesk-v0.1.0-RC-Windows-x64.zip`
+- 前往 **Releases** 下载 `MdDesk-v0.1.0-Windows-x64.zip`
 - 解压后**整个文件夹**一起拷贝到目标机器
 - 双击 `md-desk.exe` 启动
 

@@ -1,6 +1,6 @@
-# MdDesk v0.1.0 — Release Candidate
+# MdDesk v0.1.0 — Release
 
-**状态：** Release Candidate（对外试用候选版本）
+**状态：** 已发布（Release）
 **日期：** 2026-08-16
 **构建方式：** PyInstaller 6.22.1 单目录打包（onedir + windowed），自包含运行环境。
   转换引擎基于 Microsoft MarkItDown（本工具为其非官方 GUI 封装，无关联）。
