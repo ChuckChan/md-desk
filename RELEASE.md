@@ -1,7 +1,7 @@
 # MdDesk v0.3 — Release
 
-**状态：** 待发布（Release 工程完成，等人工批准）
-**日期：** 2026-08-17
+**状态：** 已发布（GitHub Release `v0.3`，draft=false）
+**日期：** 2026-08-17（发布），2026-08-18（双语 README / 精简 Release 正文）
 **构建方式：** PyInstaller 6.22.1 单目录打包（onedir + windowed），自包含运行环境。
   转换引擎基于 Microsoft MarkItDown 0.1.7（本工具为其非官方 GUI 封装，无关联；引擎版本锁定，不升级）。
   v0.3 在 v0.2 基础上新增 AI 增强转换（LLM 图片描述 + 图片 / 扫描件 OCR），由 vendored `markitdown-ocr` 插件驱动。

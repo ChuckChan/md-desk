@@ -1,58 +1,65 @@
 # MdDesk
 
-> 基于 Microsoft MarkItDown 的文档转 Markdown 桌面工具（非官方、无关联）。
+> A desktop tool that converts documents to Markdown, built on Microsoft MarkItDown (unofficial, not affiliated).
 
-MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / PowerPoint / HTML / 纯文本 / CSV / Outlook `.msg` / 安全的远程 URL / 音频 等）批量转换为 Markdown。底层转换由 [Microsoft MarkItDown](https://github.com/microsoft/markitdown) 驱动；MdDesk 只是它的图形界面封装，与 Microsoft 无关联。
+[简体中文](README.zh-CN.md)
 
-## 下载与运行
+MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / Word / Excel / PowerPoint / HTML / plain text / CSV / Outlook `.msg` / safe remote URLs / audio, etc.) into Markdown. The conversion engine is [Microsoft MarkItDown](https://github.com/microsoft/markitdown); MdDesk is only its graphical wrapper and is not affiliated with Microsoft.
 
-- 前往 **Releases** 下载 `MdDesk-v0.3-Windows-x64.zip`
-- 解压后**整个文件夹**一起拷贝到目标机器
-- 双击 `md-desk.exe` 启动
+## Download & Run
 
-> ⚠️ 不能只复制 `md-desk.exe`，必须保留同目录的 `_internal/`（内含 Python 运行环境、Qt 库与转换引擎）。
+- Go to **Releases** and download `MdDesk-v0.3-Windows-x64.zip`
+- Copy the **entire extracted folder** to the target machine
+- Double-click `md-desk.exe` to launch
 
-## 核心功能
+> ⚠️ Do not copy `md-desk.exe` alone — keep the sibling `_internal/` directory (it contains the Python runtime, Qt libraries, and the conversion engine).
 
-- 拖拽 / 添加文件，批量导入多种格式
-- 一键批量转换为 Markdown
-- 右侧查看 Markdown 源码 + 渲染预览（Qt 原生渲染）
-- 复制 Markdown、导出 `.md`（UTF-8）
-- 错误文件（损坏 / 不支持）不会崩溃，标记为 ERROR / UNSUPPORTED
-- **AI 增强转换（v0.3 新增，可选）**：
-  - **LLM 图片描述**：图片文件（PNG/JPG 等）转换时，调用「支持 Vision 的 OpenAI 兼容 API」生成图片说明，嵌入 Markdown。
-  - **图片 / 扫描件 OCR**：PDF、Word、PPT、Excel 中的图片与扫描页，调用同一 Vision API 做 OCR，识别文字以 `*[Image OCR] ... [End OCR]*` 块嵌入 Markdown。
-  - AI 默认关闭。开启后在「高级设置」填写 endpoint / model；API key 存入 **Windows 凭据管理器**，不落明文、无 Fernet 回退。
+## Key Features
 
-## 已知限制
+- Drag-and-drop / add files; batch import of many formats
+- One-click batch conversion to Markdown
+- Markdown source view + rendered preview on the right (native Qt rendering)
+- Copy Markdown, export `.md` (UTF-8)
+- Corrupt / unsupported files are flagged as ERROR / UNSUPPORTED instead of crashing
+- **AI-enhanced conversion (added in v0.3, optional)**:
+  - **LLM image description**: when converting image files (PNG/JPG, etc.), calls a "Vision-capable OpenAI-compatible API" to generate a caption, embedded in the Markdown.
+  - **Image / scanned-page OCR**: for images and scanned pages inside PDF, Word, PPT, and Excel, calls the same Vision API to OCR the text, embedded as a `*[Image OCR] ... [End OCR]*` block.
+  - AI is **off by default**. Once enabled, set endpoint / model in **Advanced Settings**; the API key is stored in the **Windows Credential Manager** — never written as plaintext, no Fernet fallback.
 
-- 预览区使用 Qt 原生 Markdown 渲染：GFM 表格、任务列表等扩展语法不会渲染为表格 / 勾选框，会以原始文本显示（复制 / 导出的是标准 Markdown 源码，不受影响）。
-- 未做代码签名；首次运行可能被 Windows SmartScreen / 杀软拦截（文件属性「解除锁定」或加白名单即可，非阻塞）。
-- **AI / OCR 需要用户自备「支持 Vision 的 OpenAI 兼容 API」**（endpoint + key）。本版本仅完成「接口接线 + 离线 dummy 客户端」的自动化验证；**真实 Provider 的鉴权 / 额度联网 E2E 未做**，不作为阻断项但已记录（详见 RELEASE.md）。
-- **OCR 失败有稳定标记**：当 OCR API 调用失败时，转换结果会包含 `*[OCR Error] ... [End OCR Error]*` 块（绝不会伪装成成功的 `*[Image OCR]` 内容），便于识别「转换完成但 OCR 未成功」。当前 UI 尚不主动弹出该警告（已知 Gap，见 RELEASE.md）。
-- `vendor/markitdown-ocr` 插件**基于 Microsoft 官方 `markitdown-ocr` 插件**，并包含 MdDesk 的「OCR 错误块」补丁。**后续升级上游插件需重新做兼容审计**（标记格式、`register_converters` 注册方式、4 个 converter 的优先级可能变化）。
-- v0.2 已含：Outlook `.msg`、安全的远程 http/https URL、YouTube 字幕、音频转写、高级设置。v0.3 在其上新增上述 AI 增强。
-- 仅支持 Windows x64。
+## Requirements / Prerequisites
 
-## 开发
+- **Windows x64 only.**
+- **AI / OCR requires your own "Vision-capable OpenAI-compatible API"** (endpoint + key). MdDesk ships no API key and no model. This release's automated tests cover wiring + an offline dummy client only; **real-provider auth / quota end-to-end testing was not performed** (non-blocking, recorded in RELEASE.md).
+- **Audio transcription** uses Google online Speech Recognition (needs internet); MP3/M4A/MP4 need a system **FFmpeg** (not bundled — a friendly message is shown if missing, not a crash).
+- **YouTube** subtitle fetching does not go through MdDesk's safe URL layer (follows upstream markitdown).
+
+## Known Limitations
+
+- The preview pane uses native Qt Markdown rendering: GFM tables, task lists, and similar extensions are shown as raw text (the copied / exported Markdown source is standard and unaffected).
+- **No code signing.** On first run Windows SmartScreen / antivirus may block it (right-click → Properties → "Unblock", or add to allowlist; non-blocking).
+- **OCR failure has a stable marker**: when the OCR API call fails, the result contains a `*[OCR Error] ... [End OCR Error]*` block (never disguised as a successful `*[Image OCR]` block), so you can tell "converted but OCR failed". The UI does not yet surface this warning proactively (known gap, see RELEASE.md).
+- The `vendor/markitdown-ocr` plugin is **based on Microsoft's official `markitdown-ocr` plugin** and includes MdDesk's "OCR error-block" patch. **Upgrading the upstream plugin later requires a fresh compatibility audit** (marker format, `register_converters` registration, and the 4 converters' priorities may change).
+- v0.2 already included: Outlook `.msg`, safe remote http/https URLs, YouTube subtitles, audio transcription, and Advanced Settings. v0.3 adds the AI enhancements above.
+
+## Development
 
 ```bash
-pip install pyside6 markitdown   # 运行源码所需
-python main.py                    # 启动 GUI（需 PySide6 + markitdown）
-bash build_exe.sh                 # 用独立打包 venv 构建 exe（见 build_exe.sh 注释）
-python make_dist_zip.py           # 生成分发 ZIP
-python verify_dist_zip.py         # 校验 ZIP（解压/结构/offscreen 启动/SHA-256）
+pip install pyside6 markitdown   # run from source
+python main.py                    # launch GUI (needs PySide6 + markitdown)
+bash build_exe.sh                 # build the exe using the standalone packaging venv (see build_exe.sh comments)
+python make_dist_zip.py           # generate the distribution ZIP
+python verify_dist_zip.py         # verify ZIP (extract / structure / offscreen boot / SHA-256)
 ```
 
-测试（需打包 venv + PySide6 可用）：
+Tests (need the packaging venv + PySide6 available):
 
 ```bash
 pip install pytest
-pytest tests/ -q                    # 63 个 pytest 用例全过
-python tests/test_file_model.py     # Stage 2 文件模型 12 项（脚本模式）
-python tests/test_audio_stage5.py   # 音频 / 回归 13 项（脚本模式）
+pytest tests/ -q                    # 63 pytest cases, all pass
+python tests/test_file_model.py     # Stage 2 file model, 12 checks (script mode)
+python tests/test_audio_stage5.py   # audio / regression, 13 checks (script mode)
 ```
 
 ## License
 
-[MIT](LICENSE) — 基于 Microsoft MarkItDown（同样 MIT）。非官方封装，与 Microsoft 无关联。
+[MIT](LICENSE) — based on Microsoft MarkItDown (also MIT). Unofficial wrapper, not affiliated with Microsoft.
