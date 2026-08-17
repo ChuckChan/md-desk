@@ -50,7 +50,7 @@ DEFAULT_MAX_REDIRECTS = 5
 DEFAULT_CONNECT_TIMEOUT = 10.0   # seconds
 DEFAULT_READ_TIMEOUT = 30.0      # seconds
 DEFAULT_MAX_SIZE = 50 * 1024 * 1024  # 50 MiB
-DEFAULT_USER_AGENT = "MdDesk/0.2 (+safe-url-fetch)"
+DEFAULT_USER_AGENT = "MdDesk/0.3 (+safe-url-fetch)"
 
 
 class FetchErrorCategory(str, enum.Enum):

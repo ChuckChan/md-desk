@@ -57,7 +57,12 @@ def main():
         (MissingDependencyException, FileStatus.ERROR),
         (ValueError, FileStatus.ERROR),
     ):
-        with patch("src.converter.MarkItDown") as M:
+        with patch("src.converter.MarkItDown") as M, patch(
+            "src.markitdown_factory.MarkItDown"
+        ) as Mf:
+            # v0.3 routes conversion through MarkItDownFactory, which holds its
+            # own MarkItDown binding; alias it so the patch is effective.
+            Mf.return_value = M.return_value
             M.return_value.convert.side_effect = exc_type("x")
             try:
                 convert_file("dummy.bin")

@@ -18,7 +18,9 @@ from markitdown import (
     MissingDependencyException,
 )
 
+from .engine_config import EngineConfig
 from .file_entry import FileEntry, FileStatus
+from .markitdown_factory import MarkItDownFactory
 from .settings import Settings, StreamInfoOverride
 from .url_fetch_service import FetchError, FetchErrorCategory, UrlFetchService
 
@@ -101,27 +103,122 @@ class ConversionError(Exception):
         self.message = message
 
 
+def _classify_ai_error(exc: Exception) -> str | None:
+    """Return a friendly Chinese message for an AI (OpenAI-compatible) API
+    failure, or ``None`` if the exception carries no AI error.
+
+    Why we gather more than the ``__cause__`` / ``__context__`` chain:
+
+    MarkItDown's ``_convert`` swallows a converter exception (e.g. an OpenAI SDK
+    error raised inside the built-in LLM image-description path) and, with no
+    ``raise ... from`` / active handler, re-raises a fresh
+    ``FileConversionException``. The original OpenAI error is NOT reachable via
+    ``__cause__`` / ``__context__`` — it lives in
+    ``FileConversionException.attempts[i].exc_info[1]``. So we collect:
+
+      * the explicit ``__cause__`` / ``__context__`` chain of ``exc``, and
+      * for every ``FailedConversionAttempt`` in ``exc.attempts``, the raw
+        exception value plus ITS own cause/context chain.
+
+    The same messages apply to the built-in LLM image description and the
+    markitdown-ocr plugin backend (they share one OpenAI-compatible client).
+    """
+    try:
+        import openai
+    except Exception:
+        return None
+
+    candidates: list[BaseException] = []
+
+    def _collect_chain(e: BaseException | None) -> None:
+        seen: set[int] = set()
+        cur = e
+        while cur is not None and id(cur) not in seen:
+            seen.add(id(cur))
+            candidates.append(cur)
+            nxt = getattr(cur, "__cause__", None) or getattr(cur, "__context__", None)
+            cur = nxt
+
+    _collect_chain(exc)
+
+    attempts = getattr(exc, "attempts", None)
+    if isinstance(attempts, (list, tuple)):
+        for attempt in attempts:
+            ei = getattr(attempt, "exc_info", None)
+            if isinstance(ei, tuple) and len(ei) >= 2 and isinstance(ei[1], BaseException):
+                _collect_chain(ei[1])
+
+    # Order matters: the specific subclasses must be tested before their
+    # common base ``APIStatusError`` / ``APIError``.
+    for e in candidates:
+        if isinstance(e, openai.AuthenticationError):
+            return ("AI 服务鉴权失败：API Key 无效或未授权（401）。"
+                    "请在「高级设置 → AI 增强转换」中检查 Key。")
+        if isinstance(e, openai.PermissionDeniedError):
+            return "AI 服务拒绝访问：当前 Key 无权限调用该模型（403）。"
+        if isinstance(e, openai.RateLimitError):
+            return "AI 服务额度或频率超限（429）。请稍后重试或检查配额。"
+        if isinstance(e, (openai.APIConnectionError, openai.APITimeoutError)):
+            return ("AI 服务连接失败：网络不可达或超时。请检查网络与 Endpoint "
+                    "（OpenAI 兼容地址）。")
+        if isinstance(e, openai.BadRequestError):
+            return ("AI 请求被拒绝（400）：模型或图片不支持该 Vision 请求，"
+                    "或 Prompt 过长。请检查模型名与图片。")
+        if isinstance(e, openai.APIStatusError):
+            code = getattr(e, "status_code", "?")
+            return f"AI 服务返回错误（状态码 {code}）。"
+    return None
+
+
 def map_exception(exc: Exception) -> tuple[FileStatus, str]:
     """Map a MarkItDown exception to (status, human message).
 
     UnsupportedFormatException      -> UNSUPPORTED
-    FileConversionException        -> ERROR (audio-aware friendly text)
-    MissingDependencyException     -> ERROR (audio-aware friendly text)
+    FileConversionException        -> ERROR (AI-aware, then audio-aware text)
+    MissingDependencyException     -> ERROR (AI-aware, then audio-aware text)
     any other Exception            -> ERROR
     """
     if isinstance(exc, UnsupportedFormatException):
         return FileStatus.UNSUPPORTED, f"不支持的文件格式: {exc}"
     if isinstance(exc, (FileConversionException, MissingDependencyException)):
+        ai_msg = _classify_ai_error(exc)
+        if ai_msg:
+            return FileStatus.ERROR, ai_msg
         base = f"转换失败: {exc}"
         return FileStatus.ERROR, _refine_message(exc, base)
     return FileStatus.ERROR, f"转换错误: {exc}"
 
 
-def convert_file(path: str, override: StreamInfoOverride | None = None) -> str:
+# Stable marker for a failed OCR block (vendored markitdown-ocr produces it).
+# Distinct from the success marker ``*[Image OCR] ... [End OCR]*`` so callers
+# can tell a failed OCR apart from real extracted text.
+OCR_ERROR_MARKER = "*[OCR Error]"
+
+
+def markdown_has_ocr_error(markdown: str) -> bool:
+    """Return True if the markdown contains an OCR failure block.
+
+    This is the hook MdDesk's UI can use to show "转换完成但 OCR 失败/部分失败"
+    without re-parsing conversion internals. The conversion itself still
+    succeeds (the failure is surfaced inline), so this is a soft warning, not
+    an error status.
+    """
+    return OCR_ERROR_MARKER in (markdown or "")
+
+
+def convert_file(
+    path: str,
+    override: StreamInfoOverride | None = None,
+    engine_config: EngineConfig | None = None,
+) -> str:
     """Convert a single local file to Markdown.
 
     Returns the markdown string. Raises ConversionError on failure, with
     .status mapped per map_exception(). Does NOT reimplement parsing.
+
+    When ``engine_config`` (v0.3) is provided and AI is enabled, the engine is
+    built via ``MarkItDownFactory`` with the shared LLM client + OCR plugin.
+    When ``None`` the v0.2-equivalent configuration is used.
 
     Stage 4 (advanced): when ``override`` is supplied and non-empty, the file
     is converted via ``convert_stream`` with a StreamInfo that merges the
@@ -130,10 +227,12 @@ def convert_file(path: str, override: StreamInfoOverride | None = None) -> str:
     byte-for-byte the legacy ``MarkItDown().convert(path)`` path, so default
     behavior is unchanged.
     """
+    cfg = engine_config or EngineConfig.disabled()
+
     if override is None or override.is_empty():
-        # Legacy path — identical to pre-Stage-4 behavior.
+        # Legacy path — identical to pre-Stage-4 behavior (v0.2 when AI off).
         try:
-            return MarkItDown().convert(path).markdown
+            return MarkItDownFactory.create(cfg).convert(path).markdown
         except Exception as exc:  # noqa: BLE001 - map all failures to ERROR/UNSUPPORTED
             status, message = map_exception(exc)
             raise ConversionError(status, message) from exc
@@ -150,7 +249,9 @@ def convert_file(path: str, override: StreamInfoOverride | None = None) -> str:
             filename=_Path(path).name,
         )
         merged = base.copy_and_update(**override.as_kwargs())
-        return MarkItDown().convert_stream(BytesIO(data), stream_info=merged).markdown
+        return MarkItDownFactory.create(cfg).convert_stream(
+            BytesIO(data), stream_info=merged
+        ).markdown
     except Exception as exc:  # noqa: BLE001 - map all failures to ERROR/UNSUPPORTED
         status, message = map_exception(exc)
         raise ConversionError(status, message) from exc
@@ -179,6 +280,7 @@ def convert_url(
     service: UrlFetchService | None = None,
     override: StreamInfoOverride | None = None,
     youtube_languages: list[str] | None = None,
+    engine_config: EngineConfig | None = None,
 ) -> str:
     """Safely fetch a remote http/https URL and convert it to Markdown.
 
@@ -212,7 +314,9 @@ def convert_url(
         if youtube_languages:
             kwargs["youtube_transcript_languages"] = list(youtube_languages)
 
-        return MarkItDown().convert_stream(
+        return MarkItDownFactory.create(
+            engine_config or EngineConfig.disabled()
+        ).convert_stream(
             result.content, stream_info=stream_info, **kwargs
         ).markdown
     except Exception as exc:  # noqa: BLE001 - map engine failures to ERROR/UNSUPPORTED
@@ -220,18 +324,29 @@ def convert_url(
         raise ConversionError(status, message) from exc
 
 
-def convert_entry(entry: FileEntry, settings: Settings | None = None) -> str:
+def convert_entry(
+    entry: FileEntry,
+    settings: Settings | None = None,
+    engine_config: EngineConfig | None = None,
+) -> str:
     """Convert a FileEntry, dispatching to URL or local-file handling.
 
     URL-backed entries go through convert_url(); local files through
     convert_file(). Both raise ConversionError on failure.
 
+    ``engine_config`` (v0.3) is the resolved runtime engine configuration
+    (built once per batch by the worker). If omitted, it is derived from
+    ``settings`` (or the v0.2-equivalent disabled config).
+
     ``settings`` (optional) supplies the global Conversion Options:
       * youtube_transcript_languages -> forwarded to convert_url when set.
     The per-entry ``stream_info_override`` (from the Advanced Settings dialog)
-    is always applied when present. With ``settings=None`` and no per-entry
-    override the behavior is exactly the legacy conversion flow.
+    is always applied when present. With no config and no per-entry override
+    the behavior is exactly the legacy conversion flow.
     """
+    cfg = engine_config or (
+        EngineConfig.from_settings(settings) if settings else EngineConfig.disabled()
+    )
     if getattr(entry, "url", None):
         langs = None
         if settings is not None:
@@ -240,7 +355,10 @@ def convert_entry(entry: FileEntry, settings: Settings | None = None) -> str:
             entry.url,
             override=getattr(entry, "stream_info_override", None),
             youtube_languages=langs,
+            engine_config=cfg,
         )
     return convert_file(
-        entry.path, override=getattr(entry, "stream_info_override", None)
+        entry.path,
+        override=getattr(entry, "stream_info_override", None),
+        engine_config=cfg,
     )

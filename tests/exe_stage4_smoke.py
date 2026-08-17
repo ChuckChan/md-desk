@@ -65,7 +65,7 @@ def _settings_tests():
         bad.write_text("{ not valid json ", encoding="utf-8")
         fb = Settings.load(bad)
         ok &= _check("SETTINGS_CORRUPT_FALLBACK",
-                     fb.youtube_transcript_languages == [] and fb.version == 1,
+                     fb.youtube_transcript_languages == [] and fb.version == 2,
                      repr(fb.to_dict()))
     return ok
 

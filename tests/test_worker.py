@@ -56,7 +56,7 @@ def _run(tasks, fake):
 def test_sequential():
     tasks = [(0, _DummyEntry("a.html")), (1, _DummyEntry("b.html")), (2, _DummyEntry("c.html"))]
 
-    def fake(entry, settings=None):
+    def fake(entry, settings=None, **kwargs):
         return f"# {entry.path}"
 
     started, done, failed, progress = _run(tasks, fake)
@@ -69,7 +69,7 @@ def test_sequential():
 def test_status_mapping():
     tasks = [(0, _DummyEntry("ok.html")), (1, _DummyEntry("bad.unknown")), (2, _DummyEntry("err.pdf"))]
 
-    def fake(entry, settings=None):
+    def fake(entry, settings=None, **kwargs):
         # Mimic converter.convert_entry's contract: raise ConversionError
         # (the real converter wraps raw markitdown exceptions itself).
         if entry.path.endswith("unknown"):
@@ -91,7 +91,7 @@ def test_status_mapping():
 def test_progress():
     tasks = [(i, _DummyEntry(f"f{i}.html")) for i in range(4)]
 
-    def fake(entry, settings=None):
+    def fake(entry, settings=None, **kwargs):
         return "# x"
 
     started, done, failed, progress = _run(tasks, fake)

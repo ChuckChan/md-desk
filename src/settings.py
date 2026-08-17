@@ -34,6 +34,65 @@ from typing import Any, Optional
 
 
 # --------------------------------------------------------------------------
+# AI configuration (v0.3 — AI-enhanced conversion: LLM image description +
+# official markitdown-ocr plugin).
+#
+# IMPORTANT: the API Key is NEVER stored here. It lives in Windows Credential
+# Manager (see credential_store.py). ``AIConfig`` only carries the
+# user-facing, non-secret knobs. This keeps settings.json safe to inspect /
+# share and satisfies the v0.3 "no plaintext key" requirement.
+# --------------------------------------------------------------------------
+@dataclass
+class AIConfig:
+    """Non-secret AI connection settings shown in 高级设置.
+
+    ``enabled``  -> master switch for all AI features (image description + OCR).
+    ``endpoint`` -> OpenAI-compatible base_url. Empty -> default OpenAI.
+    ``model``    -> model id (e.g. gpt-4o). Required for vision calls.
+    ``prompt``   -> optional custom prompt. Empty -> official defaults for BOTH
+                    image description and OCR (prompt is NOT force-shared; each
+                    backend falls back to its own default when this is blank).
+    """
+
+    enabled: bool = False
+    endpoint: str = ""
+    model: str = ""
+    prompt: str = ""
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "endpoint": self.endpoint,
+            "model": self.model,
+            "prompt": self.prompt,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Any) -> "AIConfig":
+        if not isinstance(data, dict):
+            return cls()
+        try:
+            enabled = bool(data.get("enabled", False))
+            endpoint = data.get("endpoint", "")
+            model = data.get("model", "")
+            prompt = data.get("prompt", "")
+            # Keep only real strings; drop anything malformed.
+            if not isinstance(endpoint, str):
+                endpoint = ""
+            if not isinstance(model, str):
+                model = ""
+            if not isinstance(prompt, str):
+                prompt = ""
+            return cls(enabled=enabled, endpoint=endpoint, model=model, prompt=prompt)
+        except Exception:  # noqa: BLE001 - any surprise -> safe default
+            return cls()
+
+    def is_effectively_configured(self) -> bool:
+        """True when AI is on AND a model is set (minimum to attempt a call)."""
+        return self.enabled and bool(self.model.strip())
+
+
+# --------------------------------------------------------------------------
 # StreamInfo Override (advanced, per-entry Input Detection Override)
 # --------------------------------------------------------------------------
 @dataclass
@@ -85,13 +144,17 @@ class StreamInfoOverride:
 class Settings:
     """Persisted MdDesk configuration.
 
-    Only contains options that are real and verifiable in markitdown 0.1.7.
-    ``version`` enables safe future migrations (unknown keys are ignored on
-    load; a version mismatch falls back to defaults rather than crashing).
+    Only contains options that are real and verifiable. ``version`` enables
+    safe future migrations (unknown keys are ignored on load; a version
+    mismatch falls back to defaults rather than crashing).
+
+    The AI API Key is intentionally absent — it is stored in Windows
+    Credential Manager, not here (see credential_store.py).
     """
 
-    version: int = 1
+    version: int = 2
     youtube_transcript_languages: list[str] = field(default_factory=list)
+    ai: AIConfig = field(default_factory=AIConfig)
 
     # Path the settings were last loaded from / should be saved to.
     # Not serialized.
@@ -104,15 +167,16 @@ class Settings:
 
         Empty ``youtube_transcript_languages`` means "let the engine choose
         its default languages" — i.e. default settings change NOTHING about
-        existing conversion behavior.
+        existing conversion behavior. AI is OFF by default (v0.2 behavior).
         """
-        return Settings(version=1, youtube_transcript_languages=[])
+        return Settings(version=2, youtube_transcript_languages=[], ai=AIConfig())
 
     # --- serialization ----------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "youtube_transcript_languages": list(self.youtube_transcript_languages),
+            "ai": self.ai.to_dict(),
         }
 
     @classmethod
@@ -120,14 +184,16 @@ class Settings:
         """Build a Settings from a parsed JSON object, validating types.
 
         Returns ``Settings.default()`` if the shape is wrong. Unknown keys are
-        ignored; missing keys fall back to defaults.
+        ignored; missing keys fall back to defaults. A missing ``ai`` block
+        yields the default (disabled) AI config, so older settings files load
+        cleanly.
         """
         if not isinstance(data, dict):
             return cls.default()
         try:
-            version = data.get("version", 1)
+            version = data.get("version", 2)
             if not isinstance(version, int):
-                version = 1
+                version = 2
             langs = data.get("youtube_transcript_languages", [])
             if not isinstance(langs, list):
                 langs = []
@@ -136,7 +202,8 @@ class Settings:
             for item in langs:
                 if isinstance(item, str) and item.strip():
                     clean_langs.append(item.strip())
-            return cls(version=version, youtube_transcript_languages=clean_langs)
+            ai = AIConfig.from_dict(data.get("ai", {}))
+            return cls(version=version, youtube_transcript_languages=clean_langs, ai=ai)
         except Exception:  # noqa: BLE001 - any surprise -> safe default
             return cls.default()
 

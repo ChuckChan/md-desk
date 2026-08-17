@@ -15,6 +15,7 @@ Kept in its own module so MainWindow stays a thin layout + signal driver.
 """
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -24,6 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from .credential_store import CredentialStoreError, delete_api_key, get_api_key, set_api_key
 from .file_entry import FileEntry
 from .settings import Settings, StreamInfoOverride
 
@@ -49,6 +51,32 @@ class AdvancedSettingsDialog(QDialog):
         self._yt_edit.setPlaceholderText("例如：zh-Hans, en, ja（逗号分隔，留空使用引擎默认）")
         conv_form.addRow("YouTube 字幕优先语言", self._yt_edit)
         layout.addWidget(conv_box)
+
+        # ---- AI 增强转换 (v0.3) ----
+        ai_box = QGroupBox("AI 增强转换")
+        ai_form = QFormLayout(ai_box)
+        self._ai_enabled = QCheckBox("启用 AI（图片描述 + OCR）")
+        self._ai_enabled.setChecked(bool(settings.ai.enabled))
+        ai_form.addRow(self._ai_enabled)
+        self._ai_endpoint = QLineEdit(settings.ai.endpoint)
+        self._ai_endpoint.setPlaceholderText("OpenAI 兼容 Endpoint，例如 https://api.openai.com/v1（留空用默认）")
+        ai_form.addRow("Endpoint", self._ai_endpoint)
+        self._ai_model = QLineEdit(settings.ai.model)
+        self._ai_model.setPlaceholderText("模型名，例如 gpt-4o（必填）")
+        ai_form.addRow("模型", self._ai_model)
+        self._ai_prompt = QLineEdit(settings.ai.prompt)
+        self._ai_prompt.setPlaceholderText("自定义 Prompt（留空则用官方默认，不强制图片/OCR 共用）")
+        ai_form.addRow("Prompt", self._ai_prompt)
+        self._ai_key = QLineEdit()
+        self._ai_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self._ai_key.setPlaceholderText("API Key（保存在 Windows 凭据管理器，不写入 settings.json）")
+        try:
+            existing = get_api_key() or ""
+        except CredentialStoreError:
+            existing = ""
+        self._ai_key.setText(existing)
+        ai_form.addRow("API Key", self._ai_key)
+        layout.addWidget(ai_box)
 
         # ---- Input Detection Override (per selected entry) ----
         override_box = QGroupBox("输入识别覆盖（仅作用于当前选中的文件）")
@@ -107,6 +135,33 @@ class AdvancedSettingsDialog(QDialog):
         # Conversion Options: YouTube languages.
         langs = [s.strip() for s in self._yt_edit.text().split(",") if s.strip()]
         self._settings.youtube_transcript_languages = langs
+
+        # AI 增强转换 (v0.3): non-secret fields go to Settings; the Key goes to
+        # Windows Credential Manager (never to settings.json).
+        self._settings.ai.enabled = self._ai_enabled.isChecked()
+        self._settings.ai.endpoint = self._ai_endpoint.text().strip()
+        self._settings.ai.model = self._ai_model.text().strip()
+        self._settings.ai.prompt = self._ai_prompt.text().strip()
+
+        new_key = self._ai_key.text()
+        try:
+            if new_key:
+                set_api_key(new_key)
+            else:
+                # Empty key field -> clear any previously stored key so a saved
+                # "AI on" config without a key fails clearly at call time
+                # rather than reusing a stale secret.
+                delete_api_key()
+        except CredentialStoreError as exc:
+            # Non-fatal: the app still runs; surface the limitation to the user.
+            from PySide6.QtWidgets import QMessageBox
+
+            QMessageBox.warning(
+                self,
+                "无法保存 API Key",
+                f"{exc}\n\nAI 已勾选但不会生效，直到在受支持的平台上保存 Key。",
+            )
+
         self._settings.save()  # persists to %APPDATA%/MdDesk/settings.json
 
         # Input Detection Override (only when an entry is selected).

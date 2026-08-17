@@ -35,6 +35,10 @@ def check(name: str, cond, detail: str = "") -> None:
     ok = bool(cond)
     results.append((name, ok, detail))
     print(("PASS" if ok else "FAIL"), "-", name, "" if ok else f":: {detail}")
+    # Make the check meaningful under pytest (previously only printed, so a
+    # regression could never fail the suite). Script mode (main()) still enforces
+    # the same via the results summary + sys.exit(1).
+    assert ok, f"{name} :: {detail}"
 
 
 def test_add_single() -> None:
@@ -108,6 +112,9 @@ def test_invalid_and_dir() -> None:
 
 
 def test_mime_drag() -> None:
+    # A QWidget (FileTableView) needs a live QApplication; ensure one exists
+    # (matches the pattern used by every other GUI test in this repo).
+    QApplication.instance() or QApplication([])
     with tempfile.TemporaryDirectory() as d:
         f = _make_file(d, "dropped.txt")
         mime = QMimeData()
@@ -129,7 +136,7 @@ def test_mime_drag() -> None:
 
 
 def test_mainwindow_offscreen() -> None:
-    app = QApplication.instance()
+    app = QApplication.instance() or QApplication([])
     w = MainWindow()
     w.show()
     app.processEvents()

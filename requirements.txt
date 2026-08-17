@@ -32,7 +32,21 @@
 # additionally need an external FFmpeg binary (NOT bundled; see plan §15 /
 # Stage5_Evidence). WAV/aiff/flac need neither extra binary nor FFmpeg.
 
+# v0.3: AI-enhanced conversion (LLM image description + official markitdown-ocr
+# plugin). `openai` provides the OpenAI-compatible client used for BOTH the
+# built-in image description and the OCR plugin's LLM-vision backend.
+# `PyMuPDF` (fitz) is required by markitdown-ocr for PDF page rasterization.
+# The OCR plugin itself is VENDORED at ./vendor/markitdown-ocr (pinned to the
+# 0.1.0 source snapshot) so a fresh venv builds from repo declarations alone.
+# Its core deps (pdfminer.six, pdfplumber, mammoth, python-docx, python-pptx,
+# pandas, openpyxl, Pillow) are already satisfied by markitdown 0.1.7's tree.
+# Its optional `[llm]` extra (`openai>=1.0.0`) is covered by the explicit
+# `openai` pin below.
+
 markitdown[outlook,youtube-transcription,audio-transcription]==0.1.7
 youtube-transcript-api==1.2.4
 PySide6_Essentials==6.11.1
 pyinstaller==6.22.1
+openai>=1.0.0
+PyMuPDF>=1.24.0
+./vendor/markitdown-ocr

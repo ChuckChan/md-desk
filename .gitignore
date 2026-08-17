@@ -1,5 +1,6 @@
 # Build artifacts (large, regenerated)
 build/
+build_v03_smoke/
 dist/
 *.spec
 

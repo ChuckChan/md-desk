@@ -11,6 +11,7 @@ Task shape: list of (row_index, file_path).
 from PySide6.QtCore import QThread, Signal
 
 from .converter import ConversionError, convert_entry
+from .engine_config import EngineConfig
 from .file_entry import FileEntry
 from .settings import Settings
 
@@ -27,10 +28,17 @@ class ConversionWorker(QThread):
         self,
         tasks: list[tuple[int, FileEntry]],
         settings: Settings | None = None,
+        engine_config: EngineConfig | None = None,
     ) -> None:
         super().__init__()
         self._tasks = list(tasks)
         self._settings = settings
+        # Resolve the runtime engine config ONCE for the whole batch so the
+        # OpenAI-compatible client (and OCR plugin registration) is shared
+        # across all files instead of being rebuilt per file.
+        self._engine_config = engine_config or (
+            EngineConfig.from_settings(settings) if settings else EngineConfig.disabled()
+        )
         self._success = 0
         self._failed = 0
 
@@ -42,7 +50,7 @@ class ConversionWorker(QThread):
             try:
                 # Network access (URL entries) happens here, OFF the GUI
                 # thread, so the UI stays responsive.
-                markdown = convert_entry(entry, settings=self._settings)
+                markdown = convert_entry(entry, engine_config=self._engine_config)
                 self.file_done.emit(row, markdown)
                 self._success += 1
             except ConversionError as exc:

@@ -4,16 +4,16 @@ cd "D:/WB/2026-08-16-02-02-20/markitdown-gui" || exit 1
 PYI="D:/WB/markitdown_packaging_venv/Scripts/pyinstaller.exe"
 PIP="D:/WB/markitdown_packaging_venv/Scripts/python.exe -m pip"
 
-# Reproducible build baseline (Stage 0/1B): ensure the declared build
-# dependencies are present in the packaging venv before freezing. This pulls
-# in `olefile` via `markitdown[outlook]` and pins markitdown/PySide6/PyInstaller.
+# Keep the build baseline in sync with the product EXE (same deps + flags),
+# then build the hermetic v0.3 AI/OCR smoke as a CONSOLE executable so its
+# PASS/FAIL output is visible (the product md-desk.exe is --windowed).
 "$PIP" install -r requirements.txt || {
   echo "WARN: pip install -r requirements.txt failed; continuing with current venv state" >&2
 }
 "$PYI" \
-  --name md-desk \
-  --onedir --windowed --noconfirm \
-  --distpath dist --workpath build \
+  --name md-desk-v03-smoke \
+  --onedir --console --noconfirm \
+  --distpath dist --workpath build_v03_smoke \
   --collect-submodules markitdown \
   --collect-submodules markitdown_ocr \
   --collect-data magika --collect-data pdfminer \
@@ -30,5 +30,5 @@ PIP="D:/WB/markitdown_packaging_venv/Scripts/python.exe -m pip"
   --exclude-module PySide6.QtSql --exclude-module PySide6.QtTest --exclude-module PySide6.QtDesigner --exclude-module PySide6.QtUiTools --exclude-module PySide6.QtHelp --exclude-module PySide6.QtNfc --exclude-module PySide6.QtScxml --exclude-module PySide6.QtSensors --exclude-module PySide6.QtGamepad --exclude-module PySide6.QtVirtualKeyboard --exclude-module PySide6.QtRemoteObjects --exclude-module PySide6.QtWebView \
   --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtWebEngineWidgets --exclude-module PySide6.QtWebEngineQuick \
   --exclude-module PySide6.QtMultimedia --exclude-module PySide6.QtMultimediaWidgets --exclude-module PySide6.QtXmlPatterns --exclude-module PySide6.QtXml --exclude-module PySide6.QtPrintSupport \
-  main.py
+  tests/exe_v03_smoke.py
 echo "PYINSTALLER_EXIT=$?"

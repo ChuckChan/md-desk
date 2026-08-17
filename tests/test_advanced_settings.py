@@ -92,7 +92,7 @@ def test_corrupt_fallback():
         bad.write_text("{ this is : not json ", encoding="utf-8")
         s1 = Settings.load(bad)
         ok &= _check("3a. 非法 JSON -> 默认且未崩溃",
-                     s1.youtube_transcript_languages == [] and s1.version == 1,
+                     s1.youtube_transcript_languages == [] and s1.version == 2,
                      f"{s1.to_dict()}")
 
         # (b) wrong-typed languages (not a list)
@@ -138,7 +138,10 @@ def test_extension_override_mechanism():
         tf.write(b"hello,world\n")  # content irrelevant; engine is mocked
         path = tf.name
     try:
-        with patch("src.converter.MarkItDown") as M:
+        with patch("src.converter.MarkItDown") as M, patch(
+            "src.markitdown_factory.MarkItDown"
+        ) as Mf:
+            Mf.return_value = M.return_value
             M.return_value.convert_stream.return_value = type("R", (), {"markdown": "x"})()
             convert_file(path, override=ov)
             args, kwargs = M.return_value.convert_stream.call_args
@@ -157,7 +160,10 @@ def test_mime_override_mechanism():
         tf.write(b"data")
         path = tf.name
     try:
-        with patch("src.converter.MarkItDown") as M:
+        with patch("src.converter.MarkItDown") as M, patch(
+            "src.markitdown_factory.MarkItDown"
+        ) as Mf:
+            Mf.return_value = M.return_value
             M.return_value.convert_stream.return_value = type("R", (), {"markdown": "x"})()
             convert_file(path, override=ov)
             _, kwargs = M.return_value.convert_stream.call_args
@@ -173,7 +179,10 @@ def test_mime_override_mechanism():
 def test_charset_and_youtube_override_mechanism():
     ov = StreamInfoOverride(charset="latin-1")
     with patch("src.converter.UrlFetchService", _FakeFetchService), \
-         patch("src.converter.MarkItDown") as M:
+         patch("src.converter.MarkItDown") as M, patch(
+            "src.markitdown_factory.MarkItDown"
+        ) as Mf:
+        Mf.return_value = M.return_value
         M.return_value.convert_stream.return_value = type("R", (), {"markdown": "x"})()
         convert_url("https://example.com/x.bin",
                     override=ov,
@@ -192,7 +201,10 @@ def test_charset_and_youtube_override_mechanism():
     # When languages is empty/None, the kwarg must NOT be forwarded
     # (preserves legacy behavior).
     with patch("src.converter.UrlFetchService", _FakeFetchService), \
-         patch("src.converter.MarkItDown") as M:
+         patch("src.converter.MarkItDown") as M, patch(
+            "src.markitdown_factory.MarkItDown"
+        ) as Mf:
+        Mf.return_value = M.return_value
         M.return_value.convert_stream.return_value = type("R", (), {"markdown": "x"})()
         convert_url("https://example.com/y.bin", youtube_languages=[])
         _, kwargs = M.return_value.convert_stream.call_args

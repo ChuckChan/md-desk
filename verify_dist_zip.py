@@ -7,8 +7,8 @@ import hashlib
 import subprocess
 
 BASE = r"D:\WB\2026-08-16-02-02-20\markitdown-gui"
-ZIP = os.path.join(BASE, "MdDesk-v0.2-Windows-x64.zip")
-ROOT = "MdDesk-v0.2"
+ZIP = os.path.join(BASE, "MdDesk-v0.3-Windows-x64.zip")
+ROOT = "MdDesk-v0.3"
 EXTRACT = r"D:\_dist_verify"
 EXE = os.path.join(EXTRACT, ROOT, "md-desk", "md-desk.exe")
 INTERNAL = os.path.join(EXTRACT, ROOT, "md-desk", "_internal")
@@ -46,7 +46,8 @@ def main():
     assert os.path.isdir(INTERNAL), f"MISSING _internal: {INTERNAL}"
     assert os.path.isfile(os.path.join(EXTRACT, ROOT, "RELEASE.md"))
     assert os.path.isfile(os.path.join(EXTRACT, ROOT, "README.txt"))
-    print("STRUCTURE_OK exe+_internal+RELEASE.md+README.txt present")
+    assert os.path.isfile(os.path.join(EXTRACT, ROOT, "README.md"))
+    print("STRUCTURE_OK exe+_internal+RELEASE.md+README.txt+README.md present")
 
     # 4) offscreen boot
     env = dict(os.environ)

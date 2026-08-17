@@ -46,6 +46,7 @@ from PySide6.QtWidgets import (
 )
 
 from .advanced_settings_dialog import AdvancedSettingsDialog
+from .engine_config import EngineConfig
 from .file_entry import FileStatus
 from .file_model import FileModel
 from .settings import Settings
@@ -259,7 +260,20 @@ class MainWindow(QMainWindow):
         self._set_converting(True)
         self.statusBar().showMessage(f"准备转换 {total} 个文件…")
 
-        self._worker = ConversionWorker(tasks, settings=self._settings)
+        # Resolve the runtime engine config ONCE (v0.3). If AI is enabled but
+        # the official OCR plugin is missing, surface a clear, non-fatal
+        # warning: image description still works, only scan/OCR is unavailable.
+        engine_config = EngineConfig.from_settings(self._settings)
+        if engine_config.ai_enabled and not engine_config.ocr_plugin_available:
+            QMessageBox.warning(
+                self,
+                "AI 已启用，但 OCR 插件缺失",
+                "AI 已启用，但未找到官方 markitdown-ocr 插件：\n"
+                "扫描件 / 图片中的文字将无法识别（OCR 不可用）。\n"
+                "图片描述（LLM）仍可使用。请确认 markitdown-ocr 已安装。",
+            )
+
+        self._worker = ConversionWorker(tasks, engine_config=engine_config)
         self._worker.file_started.connect(self._on_file_started)
         self._worker.file_done.connect(self._on_file_done)
         self._worker.file_failed.connect(self._on_file_failed)
