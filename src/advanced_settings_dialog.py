@@ -78,6 +78,19 @@ class AdvancedSettingsDialog(QDialog):
         ai_form.addRow("API Key", self._ai_key)
         layout.addWidget(ai_box)
 
+        # ---- 转换质量检查 (v0.4 Stage 2) ----
+        qual_box = QGroupBox("转换质量检查")
+        qual_form = QFormLayout(qual_box)
+        self._quality_enabled = QCheckBox("启用转换质量检查 (QualityInspector)")
+        self._quality_enabled.setChecked(bool(settings.quality_enabled))
+        self._quality_enabled.setToolTip(
+            "默认关闭。开启后，成功的转换会做轻量静态检查"
+            "（空输出 / 异常短 / 乱码 / OCR 失败），仅产生提示，"
+            "不会修改转换结果或状态。"
+        )
+        qual_form.addRow(self._quality_enabled)
+        layout.addWidget(qual_box)
+
         # ---- Input Detection Override (per selected entry) ----
         override_box = QGroupBox("输入识别覆盖（仅作用于当前选中的文件）")
         override_form = QFormLayout(override_box)
@@ -135,6 +148,10 @@ class AdvancedSettingsDialog(QDialog):
         # Conversion Options: YouTube languages.
         langs = [s.strip() for s in self._yt_edit.text().split(",") if s.strip()]
         self._settings.youtube_transcript_languages = langs
+
+        # Conversion quality inspection (v0.4 Stage 2). Default OFF in code;
+        # this is the only user-facing switch for it.
+        self._settings.quality_enabled = self._quality_enabled.isChecked()
 
         # AI 增强转换 (v0.3): non-secret fields go to Settings; the Key goes to
         # Windows Credential Manager (never to settings.json).

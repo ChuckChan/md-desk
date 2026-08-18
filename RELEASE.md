@@ -1,98 +1,76 @@
-# MdDesk v0.3 — Release
+# MdDesk v0.4.0 — Release Candidate
 
-**状态：** 已发布（GitHub Release `v0.3`，draft=false）
-**日期：** 2026-08-17（发布），2026-08-18（双语 README / 精简 Release 正文）
-**构建方式：** PyInstaller 6.22.1 单目录打包（onedir + windowed），自包含运行环境。
-  转换引擎基于 Microsoft MarkItDown 0.1.7（本工具为其非官方 GUI 封装，无关联；引擎版本锁定，不升级）。
-  v0.3 在 v0.2 基础上新增 AI 增强转换（LLM 图片描述 + 图片 / 扫描件 OCR），由 vendored `markitdown-ocr` 插件驱动。
+**Status:** Release Candidate（等待最终发布批准 / awaiting final publish approval）
+**Date:** 2026-08-19
+**Build:** PyInstaller onedir + windowed, self-contained runtime. Conversion engine: Microsoft **MarkItDown 0.1.7** (pinned, not upgraded). v0.4.0 layers diagnostics + opt-in quality inspection on top of v0.3; conversion behavior with quality OFF is byte-for-byte identical to v0.3.
 
-## 相较 v0.2 新增能力
+---
 
-- **LLM 图片描述（AI 增强）**：图片文件转换时，调用「支持 Vision 的 OpenAI 兼容 API」生成图片说明并嵌入 Markdown。
-- **图片 / 扫描件 OCR（AI 增强）**：PDF、Word、PPT、Excel 中的图片与扫描页，调用同一 Vision API 做 OCR，识别文字以 `*[Image OCR] ... [End OCR]*` 块嵌入 Markdown。
-- **OCR 失败有稳定、可识别标记**：OCR API 调用失败时，结果包含 `*[OCR Error] ... [End OCR Error]*`（绝不会伪装成成功的 `*[Image OCR]` 内容）。这一约定是 v0.3 的硬性要求，源码与冻结二进制中均验证通过。
-- **AI 配置 UI + Windows 凭据管理器**：endpoint / model 存于设置；API key 仅存 Windows 凭据管理器，不落明文、无 Fernet 回退。
-- **`vendor/markitdown-ocr`**：vendored 的 `markitdown-ocr` 插件（优先级 -1.0，注册 PDF/DOCX/PPTX/XLSX 四个 OCR converter）。
+## What's new in v0.4.0 (vs v0.3)
 
-## 关于 `vendor/markitdown-ocr` 的来源与维护义务
+- **Unified conversion-result pipeline** (`ConversionResult` + a single `file_finished` signal) — one terminal path now carries both success and failure, removing the old dual-signal handling and making terminal-state updates robust.
+- **Conversion quality inspection** (`QualityInspector`, v0.4 Stage 2) — opt-in via **Advanced Settings**, **default OFF**. On a successful conversion it runs a lightweight static check (empty output / abnormally short output / low text yield / garbled text / OCR-failure markers) and surfaces *advisory* warnings only. It never modifies the conversion result or status.
+- **Conversion report + diagnostic log** (`ConversionReport` + `DiagnosticLogger`, v0.4 Stage 3) — each conversion produces a metadata-only report (source, status, duration, output size, warnings) persisted to a **rotating, size-capped** log (stdlib only). The log contains **no Markdown body and no secrets** (URLs/errors are redacted).
+- **Diagnostics UI panel** ("诊断" tab, v0.4 Stage 4) — shows the per-file report, quality warnings, and error details; has buttons to open the diagnostic log. It never renders the Markdown body.
+- **Stage 5 stabilization** — fixed a regression subprocess hang (Windows `close_fds` handle inheritance), added log rotation, hardened the UI against unknown warning codes / source types; no user-facing behavior change, quality OFF by default.
 
-> **重要（维护者必读）**：`vendor/markitdown-ocr` 基于 **Microsoft 官方 `markitdown-ocr` 插件**，并包含 MdDesk 的「OCR 错误块」补丁（`_ocr_service._format_ocr_block` 统一产出成功 / 错误标记，4 个 converter 全部路由经过它）。
->
-> **后续升级上游插件需重新做兼容审计**：标记格式（`*[Image OCR]*` / `*[OCR Error]*`）、`register_converters` 的注册方式、4 个 converter 的优先级与类名，都可能随上游变化。升级后必须重跑 v0.3 冻结 smoke（`exe_v03_smoke.py`）与 `test_v03_ai.py` 的 OCR 标记用例（7c / 7d / 9 / 9b）。
+---
 
-## AI / OCR 的前提条件与验证边界
+## 相较 v0.3 新增能力（中文）
 
-- **需要用户自备「支持 Vision 的 OpenAI 兼容 API」**（自定义 endpoint + 模型名）。MdDesk 不内置任何 API key、不内置任何模型。
-- **真实 Provider 的鉴权 / 额度联网 E2E 未做**。本版本的自动化验证全部基于「离线 dummy OpenAI 兼容客户端」（不联网、无 key），覆盖：接口接线、4 个 converter 在冻结二进制中的注册与执行、OCR 成功 / 失败标记、图片描述路径。真实云服务商联网实测属于非阻断项，已记录，不在本发布阻断条件内。
-- UI 当前**未**主动识别 `*[OCR Error]` 标记并弹警告（见 Remaining Gaps）。
+- **统一转换结果管线**（`ConversionResult` + 单一 `file_finished` 信号）：成功与失败共用一条终态路径，取代旧的双信号处理，终态更新更稳健。
+- **转换质量检查**（`QualityInspector`，v0.4 Stage 2）：在「高级设置」中开启，**默认关闭**。成功的转换会做轻量静态检查（空输出 / 异常短 / 文字产出过低 / 乱码 / OCR 失败标记），仅产生*提示*，绝不修改转换结果或状态。
+- **转换报告 + 诊断日志**（`ConversionReport` + `DiagnosticLogger`，v0.4 Stage 3）：每次转换产出仅含元数据的报告（来源、状态、耗时、输出字数、提示），写入**带大小上限的轮转日志**（纯标准库）。日志**不包含 Markdown 正文、不包含密钥**（URL / 错误已脱敏）。
+- **诊断面板**（「诊断」标签页，v0.4 Stage 4）：展示每个文件的报告、质量提示与错误详情，可一键打开诊断日志；不渲染 Markdown 正文。
+- **Stage 5 稳定化**：修复回归子进程挂死（Windows `close_fds` 句柄继承）、增加日志轮转、加固界面对未知 warning code / source type 的兼容；不改变用户可见行为，质量检查默认关闭。
 
-## 验收结论
+---
 
-### 1. 完整测试发现（全绿）
+## Acceptance / 验收结论
 
-- **`pytest tests/`**：**63 passed, 0 failed, 0 errors**（RC=0）。覆盖 URL / TLS / MSG / audio 回归 / regression_formats / 全部 v0.3 用例。
-  - URL / TLS / MSG 为脚本式（`main()` 提供 `server_url` / `tmp` / `fixture`），由 `tests/conftest.py` 桥接为 pytest 可发现；二者作为脚本直接运行亦全过。
-  - v0.3 用例 `test_v03_ai.py` 覆盖：AI-OFF 与 v0.2 等价、图片描述、扫描 PDF OCR、OCR 错误块标记稳定（7c）、错误块未被伪装成成功（7d）、DOCX/PPTX/XLSX OCR 失败标记（9 / 9b）。
-- **`python tests/test_file_model.py`**（脚本模式）：**12 / 12 PASS**。
-- **`python tests/test_audio_stage5.py`**（脚本模式）：**13 / 13 PASS**（含 `regression_formats`）。
+### 1. Full test suite / 完整测试
 
-> **测试工程修复（本发布内）**：`test_file_model.py` 原先仅能在脚本模式（`main()` 先建 `QApplication`）下运行；pytest 模式下两个实例化 Qt 控件的用例（`test_mime_drag`、`test_mainwindow_offscreen`）因无 `QApplication` 而崩溃。已补齐与仓库其他 GUI 测试一致的 `QApplication.instance() or QApplication([])` 写法，并让 `check()` 在失败时 `assert`（此前只 print，pytest 下永不失败）。修复后该文件 pytest 模式 **11 / 11 PASS**。
+- `pytest tests/` (no regression excluded): **116 passed, 0 failed, 84 warnings, 308.60s**.
+  - Includes the new `test_settings_v03_migration.py` (v0.3 → v0.4 settings migration: original config preserved, `quality_enabled=False`).
+  - Includes regression subprocess gates (`test_advanced_settings`, `test_stage4`, `test_stage5`) which previously hung; fixed in Stage 5.
 
-### 2. 冻结二进制 smoke（全绿）
+### 2. Frozen RC smoke / 冻结 RC 冒烟
 
-- **`md-desk-v03-smoke.exe`**（独立构建，与 `md-desk.exe` 同收集标志）：**10 / 10 PASS**，含：
-  1. `openai` 与 `markitdown_ocr` 被正确收集（importable）；
-  2. `is_ocr_plugin_available()` 在冻结构建中为 True；
-  3. AI-OFF 与 `MarkItDown()` 字节级等价（v0.2 行为保留）；
-  4. 冻结插件路径（显式 `import markitdown_ocr` + `register_converters`，因 PyInstaller 丢弃 `.dist-info` 入口点）实际注册 4 个 OCR converter；
-  5. 图片描述端到端 PASS；
-  6. 扫描 PDF OCR 端到端 PASS（`*[Image OCR]*` 出现）；
-  7. 扫描 PDF OCR 失败 → 稳定 `*[OCR Error]` 标记；
-  8. DOCX / PPTX / XLSX OCR 失败 → 稳定 `*[OCR Error]` 标记（无 `*[Image OCR]`）。
-- **`exe_stage4_smoke.exe`**（高级设置 / StreamInfo 覆盖）：PASS。
+- `dist/md-desk-rc-smoke-fix/md-desk-rc-smoke-fix.exe`（由 `tests/exe_stage6_rc_smoke.py` 经 `md-desk-rc-smoke.spec` 冻结；**全新 name/workpath 重建以规避失效的 Analysis 缓存**）：**RC_PASS / RC_EXIT=0**，覆盖全部 S6.1–S6.11 断言：
+  local file（真实 MarkItDown）、batch、URL 端到端（mock fetch+engine）、YouTube（accept + `youtube_transcript_languages` 转换器层转发）、StreamInfo 覆盖（机制 + 真实误标扩展名透传）、Advanced Settings（quality 开关持久化）、preview/copy/export、quality OFF（无警告）、quality ON+warning（状态显示"完成 (质量提示)"）、diagnostics UI（成功/警告/错误/未知类型）、日志脱敏+轮转（仅元数据）、**magika 模型已打包 / markitdown 冻结可导入**。
+  证据：`rc_smoke_fix.log`。
 
-### 3. EXE 构建
+> **修复记录（2026-08-19 02:03）**：早期冻结构建 6 次失败，根因已修复——① PYZ 未收集 `src`（旧 `build_rc` Analysis 缓存失效 + harness 在冻结模式把不稳定 `ROOT` 路径塞入 `sys.path`）；② harness `_run_batch` 手动 `deleteLater()`+`sendPostedEvents()` 同步删除 worker QThread 触发 shiboken "already deleted"。修复：harness 仅源码模式插入 `sys.path`、移除手动 worker 删除；以全新 `--workpath build_rc_fix` + spec 内 `name='md-desk-rc-smoke-fix'` 重建。修复后 PYZ 含 16 个 `src` 模块（含裸 `src` 包），冻结冒烟全绿。
 
-- `build_exe.sh` 干净重建：`PYINSTALLER_EXIT=0`。
-- 真实 `md-desk.exe`：**23,463,031 字节**（v0.2 为 16.5MB；增加来自 `markitdown_ocr` + `openai` 收集）。
-- 收集标志新增：`--collect-submodules markitdown_ocr`、`--hidden-import openai`。
+- **Source-mode RC smoke（同源验证）**：`python tests/exe_stage6_rc_smoke.py` → **RC_PASS / SRC_EXIT=0**（S6.11 冻结专属检查在源码模式跳过）。证据：`rc_source2.log`。
 
-### 4. 冻结启动证据（准确表述）
+### 3. Product EXE / 产品可执行文件
 
-- 真实 `md-desk.exe` offscreen 启动，**浸泡 6 秒无 fatal stderr**（仅 pydub 关于系统未安装 FFmpeg 的良性 `RuntimeWarning`，音频缺失时优雅降级）。
-- 启动 harness 返回 **RC=124**：这是**测试 harness 主动超时（6s 后 kill）**，**不是**「程序正常退出」。程序在浸泡期间存活、无崩溃、无 traceback。
+- `dist/md-desk/md-desk.exe` rebuilt via `build_exe.sh` (official config): **23487300 bytes**.
+- Offscreen boot survives (no fatal stderr; only the benign pydub/FFmpeg `RuntimeWarning`).
+- Frozen resources verified: `magika` model `standard_v3_3/model.onnx` bundled; `markitdown` importable; `markitdown_ocr` collected.
 
-### 5. 分发校验 `verify_dist_zip.py`
+### 4. Distribution / 分发校验
 
-- 三关：EXTRACT_OK / STRUCTURE_OK（`md-desk.exe` + `_internal` + `README.txt` + `README.md` + `RELEASE.md`）/ BOOT_OK（offscreen 启动存活）。
-- 分发包：`MdDesk-v0.3-Windows-x64.zip`，顶层目录 `MdDesk-v0.3`。
-- **大小**：164,834,816 字节（约 157 MB）
-- **SHA-256**：`123270967480efa4da95579437f8c6b85ad45baa698861fad0300a1a68a9095f`
+- `MdDesk-v0.4.0-Windows-x64.zip`: **164866334 bytes (~157 MB)**, SHA-256 `615b064cc0ad0db0b1661383cc9587504b945d4f0b100bf13b176e43d3e2a786`.
+- `verify_dist_zip.py` passes: extract + structure (`md-desk.exe` + `_internal` + `RELEASE.md` + `README.txt` + `README.md` + `README.zh-CN.md`) + content audit (no tests / source `.py` / secrets / temp `.log`) + offscreen boot.
 
-## 运行时依赖
+---
 
-- VC Runtime 已内嵌（`VCRUNTIME140.dll` + `VCRUNTIME140_1.dll`），无需单独安装 VC Redist。
-- Qt 平台插件 `qwindows.dll` 已随包发布。
-- 音频转写依赖 Google 在线 SR（需联网）；MP3/M4A/MP4 需系统 FFmpeg（不打包，缺失时给出友好提示而非崩溃）。
-- AI / OCR 依赖用户自备的 Vision 兼容 API；key 走 Windows 凭据管理器。
-- YouTube 字幕网络请求不经过 MdDesk 的 `UrlFetchService` 安全层（遵循上游 markitdown 实现）。
+## Known gaps (non-blocking) / 已知限制（非阻断）
 
-## 已知 Remaining Gaps（非阻断）
+1. **YouTube 字幕优先语言未接入批量转换路径**：`convert_url` 已支持转发 `youtube_transcript_languages`，但 worker 在批量转换时未将 `settings` 传给 `convert_entry`（仅传 `engine_config`），故该设置实际未生效。这是既有接线缺口，已记录；转换器层面支持已验证。
+2. **真实 Provider AI/OCR 联网 E2E 未做**：仅离线 dummy 客户端验证接线与标记。需用自有服务实测。
+3. **未做代码签名**：首次运行 SmartScreen / 杀软拦截（解除锁定或加白名单）。
+4. **预览区 Qt 原生渲染**：GFM 表格 / 任务列表等扩展语法以原始文本显示（复制 / 导出源码不受影响）。
+5. Vision / OCR / Audio 本身为 v0.3 既有能力；v0.4 未新增相关功能，亦未改变其默认关闭行为。
 
-1. **UI 未接入 `markdown_has_ocr_error()`**：源码已有 `converter.markdown_has_ocr_error()`（识别 `*[OCR Error]` 标记），但 UI 尚不据其弹出「转换完成但 OCR 失败 / 部分失败」警告。本发布阶段不做 UI 扩功能，保留为已知 Gap。
-2. **真实 Provider 鉴权 / 额度联网 E2E 未做**：仅离线 dummy 客户端验证。需用户用自有服务实测。
-3. **首次运行 SmartScreen / 杀软拦截**：未知发布者提示，非阻塞（文件属性「解除锁定」或加白名单）。
-4. **预览区 Qt 原生渲染**：GFM 表格 / 任务列表等扩展语法不渲染为表格 / 勾选框（源码不受影响）。
-5. **测试工程**：`test_file_model.py` 的 GUI 用例在受资源约束的 headless harness 中，若单进程累积内存超限可能被 kill；已通过逐文件独立进程验证全绿，且同 MainWindow 启动路径由冻结 EXE offscreen 启动独立证明。
+---
 
-## 交付物
+## Deliverables / 交付物
 
-- 可执行目录：`dist/md-desk/`（启动器 + 自包含 `_internal/` 目录，需整目录拷贝）
-- 冻结 smoke：`dist/md-desk-v03-smoke/md-desk-v03-smoke.exe`（可复跑的冻结验证；不随产品 ZIP 分发给终端用户，作为发布工程产物保留）
-- 回归验证脚本：`tests/` 下全套源码测试 + `tests/exe_*_smoke.py` 冻结烟雾测试
-- 构建脚本：`build_exe.sh`
-- 分发包：`MdDesk-v0.3-Windows-x64.zip`（顶层目录 `MdDesk-v0.3`）
-
-## 范围说明（v0.3 不做）
-
-v0.3.1 / v0.4 功能、Azure DI·CU、并发转换、原文件预览、主题切换、MCP —— 均不在本版本范围内。
+- 可执行目录：`dist/md-desk/`（启动器 + 自包含 `_internal/`）
+- RC 冒烟：`dist/md-desk-rc-smoke-fix/`（发布工程产物，不随产品 ZIP 分发给终端用户）
+- 回归验证：`tests/` + `tests/exe_stage6_rc_smoke.py`
+- 构建/分发脚本：`build_exe.sh`, `make_dist_zip.py`, `verify_dist_zip.py`
+- 分发包：`MdDesk-v0.4.0-Windows-x64.zip`（顶层目录 `MdDesk-v0.4.0`）

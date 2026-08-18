@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 from src import main_window
 from src.main_window import MainWindow
 from src.file_entry import FileStatus
+from src.result import ConversionResult
 
 _counter = count()
 
@@ -184,7 +185,7 @@ def test_auto_enable_after_conversion():
     r = _add(w, status=FileStatus.WAITING)
     w._table.selectRow(r)  # disabled while WAITING
     assert not w._act_copy.isEnabled()
-    w._on_file_done(r, "# now done")
+    w._on_file_finished(ConversionResult.success(r, "# now done"))
     ok = w._act_copy.isEnabled()
     ok = _check("8. 转换完成按钮自动启用", ok, f"enabled={w._act_copy.isEnabled()}")
     w.close()
@@ -197,8 +198,17 @@ def test_regression():
               "test_stage3_integration.py", "test_stage4.py"]
     ok = True
     for name in suites:
-        r = subprocess.run([sys.executable, str(ROOT / "tests" / name)],
-                           capture_output=True, text=True, env=env)
+        # Stage 5 fix: a full pytest session leaves live QThread objects
+        # (worker / integration tests) whose OS thread handles stay open. On
+        # Windows subprocess.run with redirected std streams defaults to
+        # close_fds=False, so the child inherits those stray handles and can
+        # deadlock at exit. close_fds=True + start_new_session=True stop
+        # inheritance; timeout caps any genuine hang so pytest can't freeze.
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "tests" / name)],
+            capture_output=True, text=True, env=env,
+            close_fds=True, start_new_session=True, timeout=180,
+        )
         last = (r.stdout.strip().splitlines() or [""])[-1]
         ok &= _check(f"9. 回归 {name}", r.returncode == 0, last if r.returncode == 0 else r.stderr[-200:])
     return ok

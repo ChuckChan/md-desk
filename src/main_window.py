@@ -46,9 +46,12 @@ from PySide6.QtWidgets import (
 )
 
 from .advanced_settings_dialog import AdvancedSettingsDialog
+from .diagnostics_panel import DiagnosticsPanel
 from .engine_config import EngineConfig
 from .file_entry import FileStatus
 from .file_model import FileModel
+from .report import DiagnosticLogger, ReportBuilder
+from .result import ConversionResult
 from .settings import Settings
 from .worker import ConversionWorker
 
@@ -124,6 +127,9 @@ class MainWindow(QMainWindow):
         # Stage 4: load persisted settings (first start -> defaults; corrupt ->
         # defaults). Never raises.
         self._settings = Settings.load()
+        # v0.4 Stage 3: lightweight diagnostic logger. Created once; writing
+        # never affects conversion (all failures are swallowed inside it).
+        self._diag_logger = DiagnosticLogger()
         self._build_layout()
         self._show_entry(None)
         self._update_status()
@@ -273,10 +279,12 @@ class MainWindow(QMainWindow):
                 "图片描述（LLM）仍可使用。请确认 markitdown-ocr 已安装。",
             )
 
-        self._worker = ConversionWorker(tasks, engine_config=engine_config)
+        self._worker = ConversionWorker(
+            tasks, engine_config=engine_config,
+            quality_enabled=self._settings.quality_enabled,
+        )
         self._worker.file_started.connect(self._on_file_started)
-        self._worker.file_done.connect(self._on_file_done)
-        self._worker.file_failed.connect(self._on_file_failed)
+        self._worker.file_finished.connect(self._on_file_finished)
         self._worker.progress.connect(self._on_progress)
         self._worker.batch_finished.connect(self._on_batch_finished)
         self._worker.start()
@@ -287,17 +295,43 @@ class MainWindow(QMainWindow):
         name = entry.filename if entry else f"#{row}"
         self.statusBar().showMessage(f"正在转换: {name}")
 
-    def _on_file_done(self, row: int, markdown: str) -> None:
-        self._model.set_status(row, FileStatus.DONE)
-        self._model.set_result(row, markdown=markdown)
-        if row == self._current_row:
-            self._show_entry(row)
+    def _on_file_finished(self, result: ConversionResult) -> None:
+        """Unified terminal handler for both success and failure.
 
-    def _on_file_failed(self, row: int, status_value: str, error_message: str) -> None:
-        self._model.set_status(row, FileStatus(status_value))
-        self._model.set_result(row, error_message=error_message)
-        if row == self._current_row:
-            self._show_entry(row)
+        On success the entry is marked DONE and its markdown stored; on failure
+        the mapped status (ERROR / UNSUPPORTED) is applied and the friendly
+        error message stored. The stable ``result.row`` is the only handle
+        used to locate the entry — no "current task" guessing.
+        """
+        self._model.set_status(result.row, result.status)
+        if result.ok:
+            self._model.set_result(result.row, markdown=result.markdown)
+        else:
+            self._model.set_result(result.row, error_message=result.error_message)
+        # v0.4 Stage 3/4: build + persist a diagnostic report (store it ON the
+        # entry, then append one log line). Non-invasive side-effect: failures
+        # here are swallowed so conversion and UI are never affected. The
+        # worker is untouched.
+        self._record_diagnostic(result)
+        # Refresh the panel for the selected row AFTER the report is attached,
+        # so it shows the just-finished conversion's diagnostics.
+        if result.row == self._current_row:
+            self._show_entry(result.row)
+
+    def _record_diagnostic(self, result: ConversionResult) -> None:
+        """Build a ``ConversionReport`` and persist it.
+
+        Stores the report on the entry (lifecycle-safe: delete / clear /
+        re-batch drop or replace it with the entry) and appends one diagnostic
+        log line. Pure side-effect — any failure is swallowed.
+        """
+        try:
+            entry = self._model.entry_at(result.row)
+            report = ReportBuilder.build(result, entry)
+            self._model.set_report(result.row, report)
+            self._diag_logger.record(report)
+        except Exception:  # noqa: BLE001 - logging must never break conversion
+            pass
 
     def _on_progress(self, done: int, total: int) -> None:
         self.statusBar().showMessage(f"已完成 {done} / {total}")
@@ -335,6 +369,11 @@ class MainWindow(QMainWindow):
         tabs.addTab(self._source_view, "Markdown 源码")
         self._preview_view = QTextBrowser()
         tabs.addTab(self._preview_view, "渲染预览")
+        # Stage 4 (v0.4): lightweight diagnostics tab. It consumes the entry's
+        # ConversionReport directly (no log reading, no Markdown body copy),
+        # keeping the main window's default source/preview tabs clean.
+        self._diag_panel = DiagnosticsPanel(log_path=self._diag_logger.log_path)
+        tabs.addTab(self._diag_panel, "诊断")
 
         layout.addWidget(bar)
         layout.addWidget(tabs, 1)
@@ -353,11 +392,13 @@ class MainWindow(QMainWindow):
         if row is None or row < 0 or row >= self._model.rowCount():
             self._source_view.setPlainText("未选择文件")
             self._preview_view.setMarkdown("")
+            self._diag_panel.clear()
             return
         entry = self._model.entry_at(row)
         if entry is None:
             self._source_view.setPlainText("未选择文件")
             self._preview_view.setMarkdown("")
+            self._diag_panel.clear()
             return
         if entry.status == FileStatus.DONE:
             md = entry.markdown or ""
@@ -373,6 +414,9 @@ class MainWindow(QMainWindow):
         else:  # WAITING
             self._source_view.setPlainText("等待转换")
             self._preview_view.setMarkdown("等待转换")
+        # Stage 4: feed the diagnostics panel the entry's current report
+        # (None when not yet converted). The panel never reads the log file.
+        self._diag_panel.show_report(entry.report)
         self._update_actions()
 
     # ---- copy / export (Stage 5) ----

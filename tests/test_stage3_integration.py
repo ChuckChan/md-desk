@@ -25,8 +25,16 @@ def _check(name, cond, detail=""):
 
 
 def _run_batch(window):
-    window._worker.wait()
+    worker = window._worker
+    worker.wait()
     QApplication.instance().processEvents()
+    # Stage 5: ensure the worker object is destroyed (not just finished) so its
+    # QThread / OS thread handle does not linger between tests. _on_batch_finished
+    # already scheduled deleteLater; we flush it here deterministically.
+    if worker is not None:
+        worker.deleteLater()
+    QApplication.instance().processEvents()
+    QApplication.instance().sendPostedEvents()
 
 
 def test_markdown_written():

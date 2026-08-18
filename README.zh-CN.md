@@ -8,7 +8,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 ## 下载与运行
 
-- 前往 **Releases** 下载 `MdDesk-v0.3-Windows-x64.zip`
+- 前往 **Releases** 下载 `MdDesk-v0.4.0-Windows-x64.zip`
 - 解压后**整个文件夹**一起拷贝到目标机器
 - 双击 `md-desk.exe` 启动
 
@@ -25,6 +25,8 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
   - **LLM 图片描述**：图片文件（PNG/JPG 等）转换时，调用「支持 Vision 的 OpenAI 兼容 API」生成图片说明，嵌入 Markdown。
   - **图片 / 扫描件 OCR**：PDF、Word、PPT、Excel 中的图片与扫描页，调用同一 Vision API 做 OCR，识别文字以 `*[Image OCR] ... [End OCR]*` 块嵌入 Markdown。
   - AI 默认关闭。开启后在「高级设置」填写 endpoint / model；API key 存入 **Windows 凭据管理器**，不落明文、无 Fernet 回退。
+- **诊断面板（v0.4.0 新增）**：「诊断」标签页展示每个文件的转换报告（来源、状态、耗时、输出字数）；开启质量检查后还会显示质量提示与错误详情。不渲染 Markdown 正文，可一键打开诊断日志。
+- **转换质量检查（v0.4.0 新增，可选，默认关闭）**：在「高级设置」开启后，对成功的转换做轻量静态检查（空输出 / 异常短 / 文字产出过低 / 乱码 / OCR 失败标记），仅产生提示，绝不修改转换结果或状态。
 
 ## 使用条件 / 前提
 
@@ -37,7 +39,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 - 预览区使用 Qt 原生 Markdown 渲染：GFM 表格、任务列表等扩展语法不会渲染为表格 / 勾选框，会以原始文本显示（复制 / 导出的是标准 Markdown 源码，不受影响）。
 - **未做代码签名**；首次运行可能被 Windows SmartScreen / 杀软拦截（文件属性「解除锁定」或加白名单即可，非阻塞）。
-- **OCR 失败有稳定标记**：当 OCR API 调用失败时，转换结果会包含 `*[OCR Error] ... [End OCR Error]*` 块（绝不会伪装成成功的 `*[Image OCR]` 内容），便于识别「转换完成但 OCR 未成功」。当前 UI 尚不主动弹出该警告（已知 Gap，见 RELEASE.md）。
+- **OCR 失败有稳定标记**：当 OCR API 调用失败时，转换结果会包含 `*[OCR Error] ... [End OCR Error]*` 块（绝不会伪装成成功的 `*[Image OCR]` 内容）。开启「转换质量检查」后，「诊断」面板会主动显示该提示；默认关闭，因此不开质量检查则不会弹出提示。
 - `vendor/markitdown-ocr` 插件**基于 Microsoft 官方 `markitdown-ocr` 插件**，并包含 MdDesk 的「OCR 错误块」补丁。**后续升级上游插件需重新做兼容审计**（标记格式、`register_converters` 注册方式、4 个 converter 的优先级可能变化）。
 - v0.2 已含：Outlook `.msg`、安全的远程 http/https URL、YouTube 字幕、音频转写、高级设置。v0.3 在其上新增上述 AI 增强。
 

@@ -60,6 +60,12 @@ class FileModel(QAbstractTableModel):
             if col == 2:
                 return humanize_size(entry.size)
             if col == 3:
+                # Stage 4: a DONE entry that also produced quality warnings is
+                # surfaced as "完成 (质量提示)" — NEVER as an error. This keeps
+                # the main list readable while the full detail lives in the
+                # diagnostics panel.
+                if entry.status == FileStatus.DONE and entry.report and entry.report.warnings:
+                    return "完成 (质量提示)"
                 return entry.status.value
         if role == Qt.ItemDataRole.TextAlignmentRole:
             if col == 2:
@@ -170,3 +176,22 @@ class FileModel(QAbstractTableModel):
             entry.markdown = markdown
         if error_message is not None:
             entry.error_message = error_message
+
+    def set_report(self, row: int, report) -> None:
+        """Attach the latest ``ConversionReport`` to an entry (Stage 4).
+
+        Stored ON the entry object so the report's lifecycle follows the
+        entry's own lifecycle: removing / clearing / re-batching an entry drops
+        its report with it, and a re-batched row gets a fresh report — no stale
+        report from another row can ever be shown (there is no separate
+        row-indexed dict that could leak across re-batches).
+
+        Emits ``dataChanged`` for the status column because a DONE entry with
+        warnings now displays as "完成 (质量提示)".
+        """
+        entry = self.entry_at(row)
+        if entry is None:
+            return
+        entry.report = report
+        idx = self.index(row, 3)
+        self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DisplayRole])

@@ -8,7 +8,7 @@ MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / W
 
 ## Download & Run
 
-- Go to **Releases** and download `MdDesk-v0.3-Windows-x64.zip`
+- Go to **Releases** and download `MdDesk-v0.4.0-Windows-x64.zip`
 - Copy the **entire extracted folder** to the target machine
 - Double-click `md-desk.exe` to launch
 
@@ -25,6 +25,8 @@ MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / W
   - **LLM image description**: when converting image files (PNG/JPG, etc.), calls a "Vision-capable OpenAI-compatible API" to generate a caption, embedded in the Markdown.
   - **Image / scanned-page OCR**: for images and scanned pages inside PDF, Word, PPT, and Excel, calls the same Vision API to OCR the text, embedded as a `*[Image OCR] ... [End OCR]*` block.
   - AI is **off by default**. Once enabled, set endpoint / model in **Advanced Settings**; the API key is stored in the **Windows Credential Manager** — never written as plaintext, no Fernet fallback.
+- **Diagnostics panel (new in v0.4.0)**: a "Diagnostics" tab shows each file's conversion report (source, status, duration, output size) and, when quality inspection is on, quality warnings and error details. It never renders the Markdown body and has buttons to open the diagnostic log.
+- **Conversion quality check (new in v0.4.0, opt-in, off by default)**: when enabled in **Advanced Settings**, successful conversions run a lightweight static check (empty / abnormally short output, low text yield, garbled text, OCR-failure markers) and surface advisory warnings. It never changes the conversion result or status.
 
 ## Requirements / Prerequisites
 
@@ -37,7 +39,7 @@ MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / W
 
 - The preview pane uses native Qt Markdown rendering: GFM tables, task lists, and similar extensions are shown as raw text (the copied / exported Markdown source is standard and unaffected).
 - **No code signing.** On first run Windows SmartScreen / antivirus may block it (right-click → Properties → "Unblock", or add to allowlist; non-blocking).
-- **OCR failure has a stable marker**: when the OCR API call fails, the result contains a `*[OCR Error] ... [End OCR Error]*` block (never disguised as a successful `*[Image OCR]` block), so you can tell "converted but OCR failed". The UI does not yet surface this warning proactively (known gap, see RELEASE.md).
+- **OCR failure has a stable marker**: when the OCR API call fails, the result contains a `*[OCR Error] ... [End OCR Error]*` block (never disguised as a successful `*[Image OCR]` block). When **转换质量检查 (quality check)** is enabled, the **Diagnostics** tab surfaces this (and other quality warnings) proactively; by default quality check is off, so no warning is shown unless you opt in.
 - The `vendor/markitdown-ocr` plugin is **based on Microsoft's official `markitdown-ocr` plugin** and includes MdDesk's "OCR error-block" patch. **Upgrading the upstream plugin later requires a fresh compatibility audit** (marker format, `register_converters` registration, and the 4 converters' priorities may change).
 - v0.2 already included: Outlook `.msg`, safe remote http/https URLs, YouTube subtitles, audio transcription, and Advanced Settings. v0.3 adds the AI enhancements above.
 

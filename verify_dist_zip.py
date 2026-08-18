@@ -5,11 +5,12 @@ import sys
 import zipfile
 import hashlib
 import subprocess
+import datetime
 
 BASE = r"D:\WB\2026-08-16-02-02-20\markitdown-gui"
-ZIP = os.path.join(BASE, "MdDesk-v0.3-Windows-x64.zip")
-ROOT = "MdDesk-v0.3"
-EXTRACT = r"D:\_dist_verify"
+ZIP = os.path.join(BASE, "MdDesk-v0.4.0-Windows-x64.zip")
+ROOT = "MdDesk-v0.4.0"
+EXTRACT = r"D:\_dist_verify_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 EXE = os.path.join(EXTRACT, ROOT, "md-desk", "md-desk.exe")
 INTERNAL = os.path.join(EXTRACT, ROOT, "md-desk", "_internal")
 
@@ -29,10 +30,13 @@ def main():
     print(f"ZIP size_bytes={size}")
     print(f"ZIP sha256={digest}")
 
-    # 2) extract (overwrite existing extract dir if present)
+    # 2) extract (fresh timestamped dir => no pre-existing bulk delete)
     if os.path.isdir(EXTRACT):
         import shutil
-        shutil.rmtree(EXTRACT)
+        try:
+            shutil.rmtree(EXTRACT)
+        except Exception as _e:
+            print(f"WARN_clean_skip {_e}")
     os.makedirs(EXTRACT, exist_ok=True)
     with zipfile.ZipFile(ZIP, "r") as zf:
         bad = zf.testzip()
@@ -47,7 +51,32 @@ def main():
     assert os.path.isfile(os.path.join(EXTRACT, ROOT, "RELEASE.md"))
     assert os.path.isfile(os.path.join(EXTRACT, ROOT, "README.txt"))
     assert os.path.isfile(os.path.join(EXTRACT, ROOT, "README.md"))
-    print("STRUCTURE_OK exe+_internal+RELEASE.md+README.txt+README.md present")
+    assert os.path.isfile(os.path.join(EXTRACT, ROOT, "README.zh-CN.md"))
+    print("STRUCTURE_OK exe+_internal+RELEASE.md+README.txt+README.md+README.zh-CN.md present")
+
+    # 3.5) content audit: no project tests / source (.py) / secrets / temp logs
+    APP = os.path.join(EXTRACT, ROOT, "md-desk")
+    n_py = n_log = n_secret = n_test = 0
+    secret_names = ("secret", "credential", "token", "private")
+    for dirpath, _dirnames, filenames in os.walk(APP):
+        for fn in filenames:
+            low = fn.lower()
+            rel = os.path.relpath(os.path.join(dirpath, fn), APP).replace("\\", "/")
+            if low.endswith(".py"):
+                n_py += 1
+            if low.endswith(".log"):
+                n_log += 1
+            if low.endswith((".key", ".p12", ".pfx", ".jks", ".env")) or any(
+                k in low for k in secret_names
+            ):
+                n_secret += 1
+            if low == "conftest.py" or low.startswith("test_") or "/tests/" in rel:
+                n_test += 1
+    assert n_py == 0, f"FOUND_SOURCE_.py={n_py}"
+    assert n_log == 0, f"FOUND_TEMP_LOG={n_log}"
+    assert n_secret == 0, f"FOUND_SECRET={n_secret}"
+    assert n_test == 0, f"FOUND_TEST={n_test}"
+    print(f"CONTENT_AUDIT_OK no=.py({n_py})/.log({n_log})/secrets({n_secret})/tests({n_test})")
 
     # 4) offscreen boot
     env = dict(os.environ)

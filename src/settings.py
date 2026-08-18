@@ -155,6 +155,10 @@ class Settings:
     version: int = 2
     youtube_transcript_languages: list[str] = field(default_factory=list)
     ai: AIConfig = field(default_factory=AIConfig)
+    # v0.4 Stage 2 — conversion quality inspection (QualityInspector).
+    # Default OFF: keeps v0.3 / S1 conversion behavior byte-for-byte unchanged.
+    # Old settings files (without this key) load as False (safe default).
+    quality_enabled: bool = False
 
     # Path the settings were last loaded from / should be saved to.
     # Not serialized.
@@ -169,7 +173,8 @@ class Settings:
         its default languages" — i.e. default settings change NOTHING about
         existing conversion behavior. AI is OFF by default (v0.2 behavior).
         """
-        return Settings(version=2, youtube_transcript_languages=[], ai=AIConfig())
+        return Settings(version=2, youtube_transcript_languages=[], ai=AIConfig(),
+                        quality_enabled=False)
 
     # --- serialization ----------------------------------------------------
     def to_dict(self) -> dict[str, Any]:
@@ -177,6 +182,7 @@ class Settings:
             "version": self.version,
             "youtube_transcript_languages": list(self.youtube_transcript_languages),
             "ai": self.ai.to_dict(),
+            "quality_enabled": self.quality_enabled,
         }
 
     @classmethod
@@ -186,7 +192,8 @@ class Settings:
         Returns ``Settings.default()`` if the shape is wrong. Unknown keys are
         ignored; missing keys fall back to defaults. A missing ``ai`` block
         yields the default (disabled) AI config, so older settings files load
-        cleanly.
+        cleanly. ``quality_enabled`` is likewise optional and defaults to False,
+        so pre-Stage-2 settings files remain fully compatible (quality OFF).
         """
         if not isinstance(data, dict):
             return cls.default()
@@ -203,7 +210,13 @@ class Settings:
                 if isinstance(item, str) and item.strip():
                     clean_langs.append(item.strip())
             ai = AIConfig.from_dict(data.get("ai", {}))
-            return cls(version=version, youtube_transcript_languages=clean_langs, ai=ai)
+            quality_enabled = bool(data.get("quality_enabled", False))
+            return cls(
+                version=version,
+                youtube_transcript_languages=clean_langs,
+                ai=ai,
+                quality_enabled=quality_enabled,
+            )
         except Exception:  # noqa: BLE001 - any surprise -> safe default
             return cls.default()
 

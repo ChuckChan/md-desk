@@ -4,6 +4,8 @@ Holds only metadata about a file to be converted later. No file content,
 no MarkItDown, no conversion logic.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from enum import Enum
 import os
@@ -38,6 +40,13 @@ class FileEntry:
     # Stage 4 (advanced): per-entry Input Detection Override. None means
     # "use the engine's normal guess". Set via the Advanced Settings dialog.
     stream_info_override: Optional[StreamInfoOverride] = None
+    # Stage 4 (v0.4): the latest ConversionReport for this entry, stored ON the
+    # entry so report lifecycle tracks the entry's own lifecycle. None until a
+    # conversion produces one. Keyed by object (not row) so delete / clear /
+    # re-batch can never show another entry's stale report. The string
+    # annotation + `from __future__ import annotations` keeps this import lazy
+    # and avoids a circular import with report.py (which imports FileEntry).
+    report: "ConversionReport | None" = None
 
     @staticmethod
     def from_path(path: str) -> "FileEntry":

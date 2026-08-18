@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 from PySide6.QtWidgets import QApplication
 from src.main_window import MainWindow
 from src.file_entry import FileStatus
+from src.result import ConversionResult
 
 _counter = count()
 
@@ -133,12 +134,12 @@ def test_auto_refresh():
     r = _add(w, status=FileStatus.WAITING)
     w._table.selectRow(r)  # current_row = r, shows 等待转换
     assert w._current_row == r
-    w._on_file_done(r, "REFRESHED_MD")
+    w._on_file_finished(ConversionResult.success(r, "REFRESHED_MD"))
     ok = w._source_view.toPlainText() == "REFRESHED_MD"
     # failed variant
     r2 = _add(w, status=FileStatus.WAITING)
     w._table.selectRow(r2)
-    w._on_file_failed(r2, FileStatus.ERROR.value, "AUTO_ERR")
+    w._on_file_finished(ConversionResult.failure(r2, FileStatus.ERROR, "AUTO_ERR"))
     ok &= "AUTO_ERR" in w._source_view.toPlainText()
     ok = _check("6. 转换完成当前预览自动刷新", ok, w._source_view.toPlainText())
     w.close()
@@ -168,8 +169,17 @@ def test_regression():
     suites = ["test_file_model.py", "test_converter.py", "test_worker.py", "test_stage3_integration.py"]
     ok = True
     for name in suites:
-        r = subprocess.run([sys.executable, str(ROOT / "tests" / name)],
-                           capture_output=True, text=True, env=env)
+        # Stage 5 fix: a full pytest session leaves live QThread objects
+        # (worker / integration tests) whose OS thread handles stay open. On
+        # Windows subprocess.run with redirected std streams defaults to
+        # close_fds=False, so the child inherits those stray handles and can
+        # deadlock at exit. close_fds=True + start_new_session=True stop
+        # inheritance; timeout caps any genuine hang so pytest can't freeze.
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "tests" / name)],
+            capture_output=True, text=True, env=env,
+            close_fds=True, start_new_session=True, timeout=180,
+        )
         ok &= _check(f"8. 回归 {name}", r.returncode == 0,
                      r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr[-200:])
     return ok

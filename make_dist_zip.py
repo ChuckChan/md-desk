@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-"""Distribution ZIP builder for MdDesk v0.3.
+"""Distribution ZIP builder for MdDesk v0.4.0.
 
-Packs the full frozen app directory + RELEASE.md + README.txt + README.md into
-a single top-level folder inside the ZIP. Pure stdlib, no external deps.
+Packs the full frozen app directory + RELEASE.md + README.txt + README.md
++ README.zh-CN.md into a single top-level folder inside the ZIP. Pure stdlib,
+no external deps.
 """
 import os
 import zipfile
@@ -12,8 +13,9 @@ SRC_DIST = os.path.join(BASE, "dist", "md-desk")
 RELEASE_MD = os.path.join(BASE, "RELEASE.md")
 README_TXT = os.path.join(BASE, "README.txt")
 README_MD = os.path.join(BASE, "README.md")
-OUT = os.path.join(BASE, "MdDesk-v0.3-Windows-x64.zip")
-ROOT = "MdDesk-v0.3"
+README_ZH = os.path.join(BASE, "README.zh-CN.md")
+OUT = os.path.join(BASE, "MdDesk-v0.4.0-Windows-x64.zip")
+ROOT = "MdDesk-v0.4.0"
 
 
 def add_dir(zf, path, arcroot):
@@ -29,7 +31,7 @@ def add_dir(zf, path, arcroot):
 
 
 def main():
-    for p in (SRC_DIST, RELEASE_MD, README_TXT, README_MD):
+    for p in (SRC_DIST, RELEASE_MD, README_TXT, README_MD, README_ZH):
         if not os.path.exists(p):
             raise SystemExit(f"MISSING: {p}")
 
@@ -40,6 +42,7 @@ def main():
         zf.write(RELEASE_MD, "/".join([ROOT, "RELEASE.md"]))
         zf.write(README_TXT, "/".join([ROOT, "README.txt"]))
         zf.write(README_MD, "/".join([ROOT, "README.md"]))
+        zf.write(README_ZH, "/".join([ROOT, "README.zh-CN.md"]))
 
     size = os.path.getsize(OUT)
     print(f"ZIP_OK files_in_dist={n_dist} size_bytes={size} path={OUT}")
