@@ -70,6 +70,42 @@
 3. 统计口径：批次摘要只统计本批次任务行（转换选中 / 重试失败时不会混入批次外行）；「未执行」= 本批次内取消后仍为 WAITING 的行。
 4. 批内重名去重以行序为准：被「目标==源文件」跳过的条目仍占用其目标名，后续同名条目得 `_2` 后缀（一致的去重语义，无安全影响，见 `src/export_service.py` docstring）。
 
+---
+
+## MdDesk v0.6.0（AI 实用化版 / AI provider unification）— 已发布
+
+**Status:** Released（已发布 / published，tag `v0.6.0` + GitHub Release，2026-08-20）
+**基线：** tag `v0.5.0`（release commit `6b8cd93`，已发布）
+**目标：** 在 v0.5.0 之上建立统一 AI Provider 抽象与 AI 实用化能力（连接测试 / 能力独立开关 / 故障隔离 / 凭据安全）；不进入 v0.7 功能（STT / 视频 / Azure DI / 知识库 / MCP / Agent 等一律不做）。
+
+### 发布元数据
+- **Tag:** `v0.6.0`（annotated tag object `10fe7bc0` → **release commit `146f8ec`**）
+- **GitHub Release:** https://github.com/ChuckChan/md-desk/releases/tag/v0.6.0
+- **正式资产：** `MdDesk-v0.6.0-Windows-x64.zip` — 164,897,910 bytes (~157.2 MB)
+- **SHA-256：** `e953cbd61e4a33829b8814f7a8ae42347acb786362b3e1415ab138b1a9f31a8f`
+- **本地冻结 SHA 与 GitHub 下载 SHA 完全一致** ✅（下载后实算 SHA-256 比对）
+
+### 新增能力（6 项）
+1. **统一 AI Provider 配置 + Client Factory**：`Settings → EngineConfig → AIProviderConfig → ClientFactory` 单一构建路径；OpenAI 兼容客户端强制注入 `timeout` 与 `max_retries=0`（避免 SDK 默认重试使实际等待 3 倍超时）；timeout 钳制 [1,600] 秒，默认 60。
+2. **API Key 安全**：仅存 Windows Credential Manager（`MdDesk/AI/OpenAI-Compatible-Key`），永不进入 settings.json / 日志 / 报告；错误消息经 `_redact_secrets` 脱敏（含 Authorization / Bearer / JWT / key=value / 裸 `sk-…` 形态）。
+3. **连接测试**：高级设置内一键测试（后台 QThread，不卡 UI）；单次最小 chat completion 一次往返验证 endpoint / credential / model；错误分类（鉴权 / 权限 / 配额 / 超时 / 网络 / 参数 / 404 / 服务端），消息恒定中文且不含异常原文。
+4. **OCR 与图片描述独立开关**：`ocr_enabled` 控制 markitdown-ocr 插件（PDF/DOCX/PPTX/XLSX 扫描识别），`image_description_enabled` 控制内置 ImageConverter（JPG/PNG LLM 描述）；因 markitdown 构造参数无法只喂 OCR 插件而不喂图片描述，采用显式 `markitdown_ocr.register_converters(md, …)` 接线，dev 与 frozen 同一路径。
+5. **AI 故障隔离**：Provider 故障（鉴权 / 超时 / 网络 / 配额等）时自动以无 AI 配置重试，文件照常 DONE 产出，并附加 `AI_PROVIDER_FAILURE` QualityWarning（含 provider / model / 耗时 / 脱敏错误）；报告与诊断面板可见；重试仍失败才报错（错误保持链式）。
+6. **旧 Settings 兼容**：v0.5 文件无需迁移即用（新增可选键 provider / timeout_seconds / ocr_enabled / image_description_enabled 均带默认值，不 bump schema version）；垃圾值安全回退；无 AI 配置时行为与 v0.5 完全一致（纯 `MarkItDown()`）。
+
+### 架构 / 文件变化
+- 新增：`src/ai_provider.py`（Provider 模型 + ClientFactory + 连接测试，Qt-free）；测试 `tests/test_v06_provider.py` / `test_v06_settings.py` / `test_v06_capabilities.py` / `test_v06_settings_ui.py` / `tests/exe_v060_rc_smoke.py`。
+- 修改：`src/settings.py`（AI 新键 + timeout 规范化）、`src/engine_config.py`（provider 字段 + `to_provider_config()`）、`src/markitdown_factory.py`（能力解耦接线）、`src/converter.py`（AI 失败隔离 + URL 流回卷）、`src/worker.py`（warning 透传）、`src/advanced_settings_dialog.py`（新 UI + 连接测试）、`src/main_window.py`（OCR/模型缺失提示）、`src/report.py`（裸 `sk-` 脱敏）、`src/version.py`（0.6.0）。
+- **安全边界未动**：credential_store.py / quality.py / file_entry.py 零改动；MarkItDown 0.1.7 未升级。
+
+### 回归与验证（全部真实执行）
+- `pytest tests/`：**168 passed, 0 failed**（v0.5 基线 151 → 168；新增 17 例：provider / settings 迁移 / 能力开关矩阵 / 设置 UI / URL 流回卷回归）。
+- 源码 RC 冒烟 `tests/exe_v060_rc_smoke.py` → **ALL V0.6.0 RC CHECKS PASSED**（含真实 localhost 连接测试 4 场景：成功 / 401 / 超时 / 不可达）。
+- 冻结 EXE RC 冒烟（`md-desk-rc-smoke-v060.spec` → `dist_rc_v060b`）→ **32/32 PASS / SMOKE_EXIT=0**（V6.1–V6.7，含冻结 EXE 内 markitdown / markitdown_ocr / openai / src.ai_provider 可导入）。
+- 独立 Reviewer 两轮：首轮 **FAIL**（BLOCKER：URL 条目 AI 降级重试复用已耗尽 BytesIO → 静默空输出；MAJOR：新测试 `return ok` 不被 pytest 强制）→ 全部修复（`e8bdc8c` / `146f8ec`，含回归测试，验证去修复必 FAIL）→ 复核 **PASS**。
+- 正式产物（`dist_v060`，md-desk.spec）：offscreen boot **8 秒存活无致命退出**；`verify_dist_zip.py` → EXTRACT_OK / STRUCTURE_OK / CONTENT_AUDIT_OK（无 `.py` / tests / logs / secrets）。
+- 已知：未做代码签名，Windows Defender / SmartScreen 可能对首次下载的 exe 弹提示或隔离（v0.4 起已记录，非 v0.6 回归）。
+
 ## What's new in v0.4.0 (vs v0.3)
 
 - **Unified conversion-result pipeline** (`ConversionResult` + a single `file_finished` signal) — one terminal path now carries both success and failure, removing the old dual-signal handling and making terminal-state updates robust.
