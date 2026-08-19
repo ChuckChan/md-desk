@@ -12,11 +12,12 @@
 |---|---|
 | Release commit（产品代码冻结） | `6b8cd93b95d4b7e016d5e5dc61539f8e95ecf3fc` |
 | 完成报告提交 | `e811f63` (docs: add MdDesk v0.5.0 completion report) |
-| SHA 回填提交（HEAD） | `b4df24db989cb4875a49950e9a81df40cf3bc573` |
-| 本地 main | `b4df24d` |
-| Remote main | `b4df24d` ✅ 一致 |
+| SHA 回填提交 | `b4df24db989cb4875a49950e9a81df40cf3bc573` |
+| 发布报告提交 | `d5bf8a2` (docs: add MdDesk v0.5.0 release report) |
+| 发布卫生收口提交 | `6a13ea6` (docs: v0.5.0 release hygiene) |
+| Remote main | `6a13ea6` ✅ |
 
-后续提交（`e811f63`, `b4df24d`）仅含完成报告与 SHA 回填，无产品代码变更。
+后续提交（`e811f63` → `b4df24d` → `d5bf8a2` → `6a13ea6`）仅含完成报告 / SHA 回填 / 发布报告 / 发布卫生收口，**无产品代码变更**。
 
 ---
 
@@ -40,7 +41,8 @@
 |---|---|
 | `git push origin main` | ✅ `f29870a..b4df24d main -> main` |
 | `git push origin v0.5.0` | ✅ `* [new tag] v0.5.0 -> v0.5.0` |
-| Remote main SHA | `b4df24d` ✅ |
+| 发布卫生收口 push | ✅ `d5bf8a2..6a13ea6 main -> main` |
+| Remote main SHA | `6a13ea6` ✅ |
 | Remote tag SHA | `0cd256e` (tag object) ✅ |
 
 ---
@@ -167,14 +169,16 @@
 
 **✅ 发布成功。** v0.5.0 已正式发布到 GitHub。
 
-- Remote main = `b4df24d` ✅
-- Remote tag v0.5.0 → `b4df24d` ✅
+- Remote main = `6a13ea6` ✅（含发布卫生收口）
+- Remote tag v0.5.0 → `b4df24d` ✅（tag 未修改）
 - GitHub Release published (isDraft=false) ✅
-- Asset `MdDesk-v0.5.0-Windows-x64.zip` uploaded (164,880,155 bytes) ✅
+- Asset `MdDesk-v0.5.0-Windows-x64.zip` uploaded (164,880,155 bytes) ✅（唯一资产，无重复）
 - SHA-256 一致 ✅
 - 所有 Background Task PASS，无 WAITING/RUNNING/LOST ✅
 - 未提交临时产物 ✅
 - 未修改产品代码 ✅
+- v0.5.0 tag 未重建 / 未修改 ✅
+- ZIP bytes 未改（纯文件重命名） ✅
 - 未进入 v0.6 ✅
 
 **Release URL:** https://github.com/ChuckChan/md-desk/releases/tag/v0.5.0
