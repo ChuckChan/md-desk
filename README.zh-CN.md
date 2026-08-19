@@ -57,7 +57,7 @@ python verify_dist_zip.py         # 校验 ZIP（解压/结构/offscreen 启动/
 
 ```bash
 pip install pytest
-pytest tests/ -q                    # 63 个 pytest 用例全过
+pytest tests/ -q                    # 122 个 pytest 用例全过
 python tests/test_file_model.py     # Stage 2 文件模型 12 项（脚本模式）
 python tests/test_audio_stage5.py   # 音频 / 回归 13 项（脚本模式）
 ```

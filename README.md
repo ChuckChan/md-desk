@@ -57,7 +57,7 @@ Tests (need the packaging venv + PySide6 available):
 
 ```bash
 pip install pytest
-pytest tests/ -q                    # 63 pytest cases, all pass
+pytest tests/ -q                    # 122 pytest cases, all pass
 python tests/test_file_model.py     # Stage 2 file model, 12 checks (script mode)
 python tests/test_audio_stage5.py   # audio / regression, 13 checks (script mode)
 ```

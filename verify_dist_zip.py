@@ -7,9 +7,12 @@ import hashlib
 import subprocess
 import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.version import __version__ as VERSION
+
 BASE = r"D:\WB\2026-08-16-02-02-20\markitdown-gui"
-ZIP = os.path.join(BASE, "MdDesk-v0.4.0-Windows-x64.zip")
-ROOT = "MdDesk-v0.4.0"
+ZIP = os.path.join(BASE, f"MdDesk-{VERSION}-Windows-x64.zip")
+ROOT = f"MdDesk-{VERSION}"
 EXTRACT = r"D:\_dist_verify_" + datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 EXE = os.path.join(EXTRACT, ROOT, "md-desk", "md-desk.exe")
 INTERNAL = os.path.join(EXTRACT, ROOT, "md-desk", "_internal")

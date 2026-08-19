@@ -1,10 +1,30 @@
-# MdDesk v0.4.0 — Release Candidate
+# MdDesk v0.4.0 — Release
 
-**Status:** Release Candidate（等待最终发布批准 / awaiting final publish approval）
+**Status:** Released（已发布 / published）
 **Date:** 2026-08-19
 **Build:** PyInstaller onedir + windowed, self-contained runtime. Conversion engine: Microsoft **MarkItDown 0.1.7** (pinned, not upgraded). v0.4.0 layers diagnostics + opt-in quality inspection on top of v0.3; conversion behavior with quality OFF is byte-for-byte identical to v0.3.
 
+> **MdDesk v0.4.1（收口修复版 / maintenance）** is prepared on top of this release (see the dedicated section below). It fixes the YouTube-subtitle-language batch wiring, consolidates the version into a single source, and corrects this document's RC wording. It does **not** add v0.5 features and does **not** change v0.4 default behavior.
+
 ---
+
+## MdDesk v0.4.1（收口修复版 / maintenance）— 待发布
+
+**Status:** 待发布（基于 v0.4.0；未 tag / 未 push / 未创建 Release）
+**基线：** tag `v0.4.0`（commit `0324e39`）
+**目标：** 修复 v0.4.0 遗留的收口问题；不新增 v0.5 功能；不改变 v0.4 默认行为与功能。
+
+### 修复内容
+1. **YouTube 字幕优先语言接入批量路径（核心修复）**：批量转换时 `ConversionWorker` 此前只把 `engine_config` 传给 `convert_entry`，未传 `settings`，导致「高级设置」里的 `youtube_transcript_languages` 实际不生效。`v0.4.1` 在 worker 中把 `settings` 一并传入，真实批量路径下该设置会转发到引擎的 `youtube_transcript_languages` 参数（转换器层支持此前已具备，验证见 `tests/test_youtube_batch.py`）。
+2. **单一版本来源**：新增 `src/version.py`（`__version__ = "0.4.1"` + `user_agent()`）。`url_fetch_service.DEFAULT_USER_AGENT` 不再硬编码 `MdDesk/0.3`，改为从单一来源读取；`make_dist_zip.py` / `verify_dist_zip.py` 的 ZIP 名称与根目录也统一引用该来源，消除版本漂移。
+3. **RELEASE.md 修正**：原文档仍标记为 “Release Candidate / 等待发布批准”，已改为 “Released（已发布）”，与正式 v0.4.0 Release 一致。
+4. **README 一致性**：README.md / README.zh-CN.md 中过时的 “63 pytest cases” 改为真实用例数（见下方验收），三者（README.md / README.zh-CN.md / README.txt）关于版本与发布事实保持一致。README.txt 已为「正式版」，无需改动。
+5. 默认行为不变：quality 默认 OFF、AI 默认 OFF、安全 URL、凭据存储、OCR/诊断语义均未回归。
+
+### 回归
+- `pytest tests/` 全绿（含新增：YouTube 批量接线测试 `tests/test_youtube_batch.py`、版本单一来源回归 `tests/test_version.py`）。
+- 源码模式 RC 冒烟 `python tests/exe_stage6_rc_smoke.py` → RC_PASS。
+- 冻结 EXE RC 冒烟（`md-desk-rc-smoke.spec`）→ RC_PASS。
 
 ## What's new in v0.4.0 (vs v0.3)
 
@@ -59,7 +79,7 @@
 
 ## Known gaps (non-blocking) / 已知限制（非阻断）
 
-1. **YouTube 字幕优先语言未接入批量转换路径**：`convert_url` 已支持转发 `youtube_transcript_languages`，但 worker 在批量转换时未将 `settings` 传给 `convert_entry`（仅传 `engine_config`），故该设置实际未生效。这是既有接线缺口，已记录；转换器层面支持已验证。
+1. ~~**YouTube 字幕优先语言未接入批量转换路径**~~ → **已在 v0.4.1 修复**：worker 现把 `settings` 一并传给 `convert_entry`，`youtube_transcript_languages` 在真实批量路径下转发到引擎（验证见 `tests/test_youtube_batch.py`）。
 2. **真实 Provider AI/OCR 联网 E2E 未做**：仅离线 dummy 客户端验证接线与标记。需用自有服务实测。
 3. **未做代码签名**：首次运行 SmartScreen / 杀软拦截（解除锁定或加白名单）。
 4. **预览区 Qt 原生渲染**：GFM 表格 / 任务列表等扩展语法以原始文本显示（复制 / 导出源码不受影响）。

@@ -44,13 +44,17 @@ from dataclasses import dataclass
 
 from markitdown import StreamInfo
 
+from .version import user_agent
+
 
 # ---- tunables ---------------------------------------------------------------
 DEFAULT_MAX_REDIRECTS = 5
 DEFAULT_CONNECT_TIMEOUT = 10.0   # seconds
 DEFAULT_READ_TIMEOUT = 30.0      # seconds
 DEFAULT_MAX_SIZE = 50 * 1024 * 1024  # 50 MiB
-DEFAULT_USER_AGENT = "MdDesk/0.3 (+safe-url-fetch)"
+# Derived from the single version source (src/version.py) so the User-Agent
+# can never drift to a stale version string again.
+DEFAULT_USER_AGENT = user_agent()
 
 
 class FetchErrorCategory(str, enum.Enum):

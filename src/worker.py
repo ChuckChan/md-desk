@@ -68,7 +68,15 @@ class ConversionWorker(QThread):
             try:
                 # Network access (URL entries) happens here, OFF the GUI
                 # thread, so the UI stays responsive.
-                markdown = convert_entry(entry, engine_config=self._engine_config)
+                # Pass settings so global Conversion Options (notably
+                # youtube_transcript_languages) reach the conversion chain in
+                # the real batch path. engine_config remains the single shared
+                # runtime engine built once per batch in __init__.
+                markdown = convert_entry(
+                    entry,
+                    settings=self._settings,
+                    engine_config=self._engine_config,
+                )
                 duration_ms = _elapsed_ms(t0)
                 # Quality is advisory only and runs solely on success. When OFF
                 # (default) we skip it entirely, so the result is identical to
