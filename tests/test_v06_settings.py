@@ -71,7 +71,7 @@ def test_v05_file_migrates_to_v06_defaults():
         ok &= _check("M7. quality_enabled 保留", s.quality_enabled is True)
         ok &= _check("M8. is_effectively_configured 仍有效",
                      s.ai.is_effectively_configured())
-    return ok
+    assert ok
 
 
 def test_garbage_values_fall_back_safely():
@@ -98,7 +98,7 @@ def test_garbage_values_fall_back_safely():
     ok &= _check("G7. 未知 provider 归一化",
                  AIConfig.from_dict({"provider": "claude"}).provider
                  == PROVIDER_OPENAI_COMPATIBLE)
-    return ok
+    assert ok
 
 
 def test_roundtrip_and_no_secret_in_file():
@@ -127,7 +127,7 @@ def test_roundtrip_and_no_secret_in_file():
         ok &= _check("R5. 重载后 OCR 关闭保留", s2.ai.ocr_enabled is False)
         ok &= _check("R6. 重载后 timeout 保留", s2.ai.timeout_seconds == 30)
         ok &= _check("R7. 重载后图片描述默认开", s2.ai.image_description_enabled is True)
-    return ok
+    assert ok
 
 
 def test_default_settings_ai_off():
@@ -137,7 +137,7 @@ def test_default_settings_ai_off():
     ok &= _check("D2. 默认 timeout 有限", 1.0 <= s.ai.timeout_seconds <= 600.0)
     ok &= _check("D3. to_dict 键集不含 api_key",
                  "api_key" not in json.dumps(s.to_dict()))
-    return ok
+    assert ok
 
 
 def _main():

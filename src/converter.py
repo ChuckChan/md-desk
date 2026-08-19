@@ -390,8 +390,18 @@ def convert_url(
     cfg = engine_config or EngineConfig.disabled()
 
     def _engine_convert(engine: EngineConfig) -> str:
+        # v0.6.0 fix: the fetched stream (BytesIO) is consumed by the first
+        # attempt; the AI-fallback retry below re-invokes this closure with
+        # the SAME result object, so rewind to 0 first or the retry silently
+        # converts an exhausted (empty) stream.
+        content = result.content
+        if hasattr(content, "seek"):
+            try:
+                content.seek(0)
+            except OSError:  # pragma: no cover - BytesIO never fails here
+                pass
         return MarkItDownFactory.create(engine).convert_stream(
-            result.content, stream_info=stream_info, **kwargs
+            content, stream_info=stream_info, **kwargs
         ).markdown
 
     return _convert_with_ai_fallback(_engine_convert, cfg, warnings_out)

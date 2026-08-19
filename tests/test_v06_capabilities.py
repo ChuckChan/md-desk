@@ -206,7 +206,7 @@ def test_factory_wiring_matrix():
         md2 = MarkItDownFactory.create(cfg)
     ok &= _check("A.批量共享同一 client",
                  md1.kwargs["llm_client"] is md2.kwargs["llm_client"])
-    return ok
+    assert ok
 
 
 # --------------------------------------------------------------------------- #
@@ -235,7 +235,7 @@ def test_conversion_capability_matrix():
             ok &= _check(f"B.{tag} 转换均为成功产出",
                          isinstance(md_png, str) and isinstance(md_docx, str)
                          and len(md_docx) > 0)
-    return ok
+    assert ok
 
 
 # --------------------------------------------------------------------------- #
@@ -308,7 +308,7 @@ def test_provider_failure_isolation_and_report():
         ok &= _check("C11. 超时同样隔离（DONE）", r_t.status == FileStatus.DONE)
         ok &= _check("C12. 超时 warning 分类正确",
                      any("超时" in w.message for w in r_t.warnings if w.code == "AI_PROVIDER_FAILURE"))
-    return ok
+    assert ok
 
 
 def test_no_ai_config_normal_conversion():
@@ -330,7 +330,64 @@ def test_no_ai_config_normal_conversion():
         results = _run_worker([(0, entry)], cfg)
         ok &= _check("N5. worker 普通路径 DONE", results and results[0].ok)
         ok &= _check("N6. 无 warning", results and not results[0].warnings)
-    return ok
+    assert ok
+
+
+def test_url_ai_fallback_stream_rewind():
+    """Regression (reviewer BLOCKER): the AI-fallback retry for a URL entry
+    must rewind the fetched BytesIO — previously the retry converted the
+    already-exhausted stream and silently produced empty output.
+
+    Spy level: a fake engine reads the stream to EOF on every attempt (like
+    markitdown does) and raises an auth error while AI is enabled. The
+    disabled retry must then still see the FULL payload — only possible if
+    converter rewound the stream between attempts."""
+    ok = True
+    from types import SimpleNamespace
+    from src.converter import convert_url
+    from markitdown import StreamInfo
+    from src.url_fetch_service import FetchResult
+
+    payload = ("# Title\n\nURL body text for the rewind regression.\n").encode("utf-8")
+
+    class _FakeService:
+        def fetch(self, url):
+            return FetchResult(
+                content=io.BytesIO(payload),
+                stream_info=StreamInfo(extension=".md", filename="doc.md"),
+                final_url=url,
+                status_code=200,
+            )
+
+    reads: list = []  # (ai_enabled, bytes_read) per engine attempt
+
+    class _FakeEngine:
+        def __init__(self, ai_enabled):
+            self._ai = ai_enabled
+
+        def convert_stream(self, content, stream_info=None, **kw):
+            data = content.read()  # consumes the stream to EOF
+            reads.append((self._ai, len(data)))
+            if self._ai:
+                raise _mk_err("auth")
+            return SimpleNamespace(markdown=data.decode("utf-8"))
+
+    with patch("src.converter.MarkItDownFactory") as factory:
+        factory.create.side_effect = (
+            lambda engine: _FakeEngine(engine.ai_enabled))
+        warnings: list = []
+        cfg = _cfg(True, True, MockClient())
+        md = convert_url("https://example.com/doc.md", service=_FakeService(),
+                         engine_config=cfg, warnings_out=warnings)
+
+    ok &= _check("U1. 两次引擎尝试（AI + 降级）", len(reads) == 2, reads)
+    ok &= _check("U2. 降级重试读到完整流（已回卷）",
+                 len(reads) == 2 and reads[1][1] == len(payload), reads)
+    ok &= _check("U3. 降级产物为完整正文", "URL body text" in md, repr(md[:60]))
+    ok &= _check("U4. 携带 AI_PROVIDER_FAILURE warning",
+                 any(w.code == "AI_PROVIDER_FAILURE" for w in warnings),
+                 [w.code for w in warnings])
+    assert ok
 
 
 def _main():
@@ -339,6 +396,7 @@ def _main():
     ok &= test_conversion_capability_matrix()
     ok &= test_provider_failure_isolation_and_report()
     ok &= test_no_ai_config_normal_conversion()
+    ok &= test_url_ai_fallback_stream_rewind()
     print("RESULT:", "PASS" if ok else "FAIL")
     return 0 if ok else 1
 

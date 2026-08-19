@@ -77,7 +77,7 @@ def test_ai_fields_gating():
     dlg._ai_enabled.setChecked(False)
     ok &= _check("U4. 取消勾选: 字段再次禁用", not dlg._ai_model.isEnabled())
     dlg.deleteLater()
-    return ok
+    assert ok
 
 
 def test_accept_persists_v06_fields():
@@ -117,7 +117,7 @@ def test_accept_persists_v06_fields():
                      "timeout_seconds" in parsed["ai"]
                      and "ocr_enabled" in parsed["ai"]
                      and "image_description_enabled" in parsed["ai"])
-    return ok
+    assert ok
 
 
 def test_connection_test_button():
@@ -161,7 +161,7 @@ def test_connection_test_button():
     # running crash).
     ok &= _check("T7. 探测线程已结束", dlg._test_runner.isFinished())
     dlg.deleteLater()
-    return ok
+    assert ok
 
 
 def test_runner_thread_is_qthread():
@@ -170,7 +170,7 @@ def test_runner_thread_is_qthread():
     runner = _ConnectionTestRunner.__new__(_ConnectionTestRunner)
     from PySide6.QtCore import QThread
     ok &= _check("R1. 探测运行于 QThread", isinstance(runner, QThread))
-    return ok
+    assert ok
 
 
 def _main():

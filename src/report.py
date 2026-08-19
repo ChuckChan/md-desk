@@ -88,6 +88,11 @@ _AUTH_RE = re.compile(
 # wherever it shows up in a logged string.
 _JWT_RE = re.compile(r"[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
 
+# Bare OpenAI-style API key (``sk-...``). Providers echo the offending key
+# back in 401 bodies (``Incorrect API key provided: sk-abc...``) without any
+# ``api_key=`` prefix, so catch the key shape itself.
+_SK_KEY_RE = re.compile(r"\bsk-[A-Za-z0-9_\-]{16,}\b")
+
 
 def _redact_secrets(text: str) -> str:
     """Blank known credential patterns in ``text`` (defense-in-depth).
@@ -101,6 +106,7 @@ def _redact_secrets(text: str) -> str:
     prefixes (which may wrap a JWT already blanked to ``<REDACTED>``).
     """
     text = _JWT_RE.sub("<REDACTED>", text)
+    text = _SK_KEY_RE.sub("<REDACTED>", text)
     text = _KV_RE.sub(lambda m: f"{m.group(1)}=<REDACTED>", text)
     text = _AUTH_RE.sub(lambda m: f"{m.group(1)} <REDACTED>", text)
     return text

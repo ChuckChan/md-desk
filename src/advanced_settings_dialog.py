@@ -275,17 +275,28 @@ class AdvancedSettingsDialog(QDialog):
         )
         self._test_btn.setEnabled(self._ai_enabled.isChecked())
 
-    def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+    def _wait_for_test_runner(self) -> None:
         # Never destroy a running QThread: let the in-flight probe finish
         # (bounded by its timeout) while keeping the event loop pumping so
-        # the UI stays responsive during the wait.
+        # the UI stays responsive during the wait. Called from closeEvent,
+        # accept and reject alike — the OK/Cancel buttons route through
+        # accept()/reject() and would otherwise bypass the closeEvent wait.
         runner = self._test_runner
         if runner is not None and runner.isRunning():
             while not runner.wait(50):
                 QApplication.processEvents()
+
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt naming
+        self._wait_for_test_runner()
         super().closeEvent(event)
 
+    def reject(self) -> None:  # noqa: N802 - QDialog override
+        self._wait_for_test_runner()
+        super().reject()
+
     def accept(self) -> None:
+        self._wait_for_test_runner()
+
         # Conversion Options: YouTube languages.
         langs = [s.strip() for s in self._yt_edit.text().split(",") if s.strip()]
         self._settings.youtube_transcript_languages = langs

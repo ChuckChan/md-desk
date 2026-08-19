@@ -149,7 +149,7 @@ def test_provider_config_model():
                  set(SUPPORTED_CAPABILITIES) == {CAPABILITY_OCR, CAPABILITY_IMAGE_DESCRIPTION})
     ok &= _check("1i. provider 词表仅 openai-compatible",
                  SUPPORTED_PROVIDERS == (PROVIDER_OPENAI_COMPATIBLE,))
-    return ok
+    assert ok
 
 
 # --------------------------------------------------------------------------- #
@@ -177,7 +177,7 @@ def test_client_factory():
     # Client construction must not leak the key in any exception/str form we
     # later log: verify the client does not stringify the key.
     ok &= _check("2f. client repr 不含 key", SECRET not in repr(client))
-    return ok
+    assert ok
 
 
 # --------------------------------------------------------------------------- #
@@ -235,7 +235,7 @@ def test_connection_matrix():
     # client build failure
     r = _probe(factory=_BoomFactory())
     ok &= _check("3o. 客户端构建失败 -> 不 ok 且不抛异常", not r.ok, r.message)
-    return ok
+    assert ok
 
 
 # --------------------------------------------------------------------------- #
@@ -263,7 +263,7 @@ def test_connection_never_raises_and_no_secret_leak():
                      blob[:120])
     # And the probe always terminates with a duration.
     ok &= _check("4x. 所有探测均有 duration", all(r.duration_ms >= 0 for r in results))
-    return ok
+    assert ok
 
 
 def _main():
