@@ -8,9 +8,9 @@
 
 ---
 
-## MdDesk v0.4.1（收口修复版 / maintenance）— 待发布
+## MdDesk v0.4.1（收口修复版 / maintenance）— 已发布
 
-**Status:** 待发布（基于 v0.4.0；未 tag / 未 push / 未创建 Release）
+**Status:** Released（已发布 / published，tag `v0.4.1` + GitHub Release，2026-08-19）
 **基线：** tag `v0.4.0`（commit `0324e39`）
 **目标：** 修复 v0.4.0 遗留的收口问题；不新增 v0.5 功能；不改变 v0.4 默认行为与功能。
 
@@ -25,6 +25,43 @@
 - `pytest tests/` 全绿（含新增：YouTube 批量接线测试 `tests/test_youtube_batch.py`、版本单一来源回归 `tests/test_version.py`）。
 - 源码模式 RC 冒烟 `python tests/exe_stage6_rc_smoke.py` → RC_PASS。
 - 冻结 EXE RC 冒烟（`md-desk-rc-smoke.spec`）→ RC_PASS。
+
+---
+
+## MdDesk v0.5.0（批量生产力版 / batch productivity）— 待发布
+
+**Status:** 待发布（实现 / 测试 / 冻结验证 / 独立 Review 全部完成；本地 release commit 已创建；未 tag / 未 push / 未创建 Release）
+**基线：** commit `7cf195e`（v0.4.1，已发布）
+**目标：** 在 v0.4.1 之上新增「批量生产力」六项功能；不改变 v0.4 默认行为、不升级 MarkItDown 0.1.7、不引入 v0.6 AI 能力。
+
+### 新增功能（6 项）
+1. **文件夹导入**：支持选择 / 拖入文件夹，递归扫描（确定顺序）；忽略目录本身；按规范化路径去重；既有文件导入行为不变。
+2. **批量导出**：全部成功（DONE）项导出到指定目录；目标名 `{stem}.md`，批内重名按行序追加 `_2/_3…`；目标==源文件时跳过（**绝不覆盖源文件**）；单条写入失败不中断（计数 + 截断错误消息，永不 raise）；不保留目录结构（平铺导出，规则见 `src/export_service.py`）。
+3. **转换选中项**：只转换当前选中的行；其余 WAITING / DONE 项不受影响。
+4. **失败重试**：重试所有 ERROR / UNSUPPORTED 项；重试行重置为 WAITING 并清空旧结果 / 报告，重跑后生成全新诊断报告；非重试行不被触碰。
+5. **安全取消**：cooperative cancellation（`threading.Event`，不使用 `QThread.terminate()`）；当前文件正常收尾；剩余任务不再启动、保持 WAITING；批次以 `batch_cancelled` 收尾。
+6. **Batch Summary**：批次结束按**本批次任务行**统计并展示：总数 / 成功 / 质量提示 / 失败 / 未执行 / 耗时（perf_counter 实测），状态栏单行消息。
+
+### 架构 / 文件变化
+- 新增 Qt-free 模块：`src/folder_scanner.py`（目录扫描）、`src/export_service.py`（批量导出）、`src/batch_summary.py`（批次统计 + 状态栏消息）。
+- `src/worker.py`：新增 `cancel()` / `is_cancelled()` 与 `batch_cancelled(success, failed)` 信号；run() 每任务前检查取消标志（协作式）。
+- `src/file_model.py`：新增 `add_folder()` / `retryable_rows()` / `done_rows()` / `tasks_for_rows()`。
+- `src/main_window.py`：新增「添加文件夹 / 转换选中 / 重试失败 / 取消 / 批量导出」动作；抽取 `_start_batch` / `_finish_batch`；拖放支持目录。
+- `src/version.py`：`__version__ = "0.5.0"`。
+- **安全边界未动**：settings.py（AI / quality 默认 OFF）、url_fetch_service.py（SSRF）、credential_store.py、quality.py、report.py、result.py、converter.py、file_entry.py 零改动；MarkItDown 0.1.7 未升级。
+
+### 回归与验证（全部真实执行）
+- `pytest tests/`：**151 passed, 0 failed**（基线 122 → 151；新增 29 例：文件夹扫描 / add_folder / worker cancel / 批量导出 / 批次统计 / selected-retry / v0.5 GUI 冒烟 + UnicodeError 回归）。
+- 源码 RC 冒烟 `python tests/exe_stage6_rc_smoke.py` → **RC_PASS / SMOKE_EXIT=0**。
+- v0.5 RC 冒烟（源码 + 冻结）：`tests/exe_v050_rc_smoke.py` → **ALL V0.5.0 RC CHECKS PASSED**。
+- 冻结 EXE RC 冒烟（全新 name+workpath：`md-desk-rc-smoke-v050.spec` → `dist_rc_v050`）→ **RC_EXIT=0**（含 V5.7 冻结 EXE 内 markitdown 可导入）。
+- 独立只读 Reviewer：**PASS**（4 条 NIT 已消化 2 条：批次统计范围改为「仅本批次任务行」、export_service 补捕获 `UnicodeError`；另 2 条按设计保留并记入已知限制）。
+
+### 已知限制（非阻断）
+1. **批量导出在 GUI 线程同步执行**：批量导出是纯文件 I/O（非转换），不违反「GUI 线程不执行耗时转换」硬约束；但条目极多时 UI 可能短暂卡顿。后续版本可移至后台线程。
+2. **导出失败可能留下半成品文件**：单条写入失败（如权限 / 编码）会留下一个空 / 部分的目标 `.md`（标准写入行为），不覆盖源文件；已计入 failed 统计。沙箱安全策略下不做进程内删除。
+3. 统计口径：批次摘要只统计本批次任务行（转换选中 / 重试失败时不会混入批次外行）；「未执行」= 本批次内取消后仍为 WAITING 的行。
+4. 批内重名去重以行序为准：被「目标==源文件」跳过的条目仍占用其目标名，后续同名条目得 `_2` 后缀（一致的去重语义，无安全影响，见 `src/export_service.py` docstring）。
 
 ## What's new in v0.4.0 (vs v0.3)
 

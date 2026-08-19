@@ -9,8 +9,10 @@ Layout (Stage 2):
     | 状态栏: 共 N 个文件                       |
     +-------------------------------------------+
 
-Left  (file area)   : FileTableView + FileModel + toolbar (add/remove/clear),
-                      accepts Windows Explorer drag-drop of local files only.
+Left  (file area)   : FileTableView + FileModel + toolbar (add/remove/clear,
+                      add folder / convert selected / retry failed / cancel),
+                      accepts Windows Explorer drag-drop of local files and
+                      directories (folders are scanned recursively).
 Right (content area): placeholder for later stages.
 Bottom              : status bar showing file count.
 
@@ -21,6 +23,7 @@ worker and only updates FileModel/UI from worker signals (main thread).
 """
 
 import os
+import time
 from pathlib import Path
 
 from PySide6.QtCore import QFileInfo, QModelIndex, Qt, Signal
@@ -46,8 +49,10 @@ from PySide6.QtWidgets import (
 )
 
 from .advanced_settings_dialog import AdvancedSettingsDialog
+from .batch_summary import summarize, summary_message
 from .diagnostics_panel import DiagnosticsPanel
 from .engine_config import EngineConfig
+from .export_service import export_batch
 from .file_entry import FileStatus
 from .file_model import FileModel
 from .report import DiagnosticLogger, ReportBuilder
@@ -57,10 +62,11 @@ from .worker import ConversionWorker
 
 
 class FileTableView(QTableView):
-    """QTableView that also accepts Windows Explorer file drag-drop.
+    """QTableView that also accepts Windows Explorer file/folder drag-drop.
 
-    Emits files_dropped(list_of_local_file_paths). Only local files are
-    accepted; directories are ignored (no recursion).
+    Emits files_dropped(list_of_local_paths). Both local files and folders
+    are accepted; folders are scanned recursively by the main window
+    (the directories themselves are never added as conversion entries).
     """
 
     files_dropped = Signal(list)
@@ -103,14 +109,18 @@ class FileTableView(QTableView):
 
     @staticmethod
     def extract_local_files(mime) -> list[str]:
-        """From dropped MIME data, return only local, regular file paths."""
+        """From dropped MIME data, return all local file and directory paths.
+
+        Directories are kept (not expanded here): the main window routes them
+        through ``add_folder`` for recursive scanning.
+        """
         out: list[str] = []
         if not mime.hasUrls():
             return out
         for url in mime.urls():
             if url.isLocalFile():
                 local = url.toLocalFile()
-                if QFileInfo(local).isFile():
+                if QFileInfo(local).isFile() or QFileInfo(local).isDir():
                     out.append(local)
         return out
 
@@ -124,6 +134,12 @@ class MainWindow(QMainWindow):
         self._worker: ConversionWorker | None = None
         self._converting = False
         self._current_row: int | None = None
+        # v0.5.0: last batch summary (for later use), batch start timestamp,
+        # and the row indices of the CURRENT batch's tasks (used so the batch
+        # summary counts only this batch's rows, never outside rows).
+        self._last_summary = None
+        self._batch_t0 = 0.0
+        self._batch_rows: list[int] = []
         # Stage 4: load persisted settings (first start -> defaults; corrupt ->
         # defaults). Never raises.
         self._settings = Settings.load()
@@ -133,6 +149,7 @@ class MainWindow(QMainWindow):
         self._build_layout()
         self._show_entry(None)
         self._update_status()
+        self._update_action_states()
 
     def _build_layout(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -175,8 +192,16 @@ class MainWindow(QMainWindow):
         self._act_remove.triggered.connect(self._on_remove_selected)
         self._act_clear = toolbar.addAction("清空")
         self._act_clear.triggered.connect(self._on_clear)
+        self._act_add_folder = toolbar.addAction("添加文件夹")
+        self._act_add_folder.triggered.connect(self._on_add_folder)
+        self._act_convert_selected = toolbar.addAction("转换选中")
+        self._act_convert_selected.triggered.connect(self._on_convert_selected)
+        self._act_retry_failed = toolbar.addAction("重试失败")
+        self._act_retry_failed.triggered.connect(self._on_retry_failed)
         self._act_convert = toolbar.addAction("开始转换")
         self._act_convert.triggered.connect(self.start_conversion)
+        self._act_cancel = toolbar.addAction("取消")
+        self._act_cancel.triggered.connect(self._on_cancel)
         self._act_advanced = toolbar.addAction("高级设置")
         self._act_advanced.triggered.connect(self._on_advanced_settings)
 
@@ -211,12 +236,31 @@ class MainWindow(QMainWindow):
         if files:
             self._model.add_paths(files)
             self._update_status()
+            self._update_action_states()
 
     def _on_files_dropped(self, paths: list[str]) -> None:
         if self._converting:
             return
-        self._model.add_paths(paths)
+        # Files keep their existing behavior; directories are scanned
+        # recursively. Mixed drops are supported.
+        for p in paths:
+            if QFileInfo(p).isDir():
+                self._model.add_folder(p)
+            else:
+                self._model.add_paths([p])
         self._update_status()
+        self._update_action_states()
+
+    def _on_add_folder(self) -> None:
+        if self._converting:
+            return
+        dir_path = QFileDialog.getExistingDirectory(self, "选择文件夹")
+        if not dir_path:
+            return
+        added, skipped = self._model.add_folder(dir_path)
+        self._update_status()
+        self._update_action_states()
+        self.statusBar().showMessage(f"已添加文件夹：新增 {added} 个文件，跳过 {skipped} 个")
 
     def _on_remove_selected(self) -> None:
         if self._converting:
@@ -226,12 +270,14 @@ class MainWindow(QMainWindow):
         for r in rows:
             self._model.removeRows(r, 1)
         self._update_status()
+        self._update_action_states()
 
     def _on_clear(self) -> None:
         if self._converting:
             return
         self._model.clear()
         self._update_status()
+        self._update_action_states()
 
     # ---- advanced settings (Stage 4) ----
     def _on_advanced_settings(self) -> None:
@@ -251,7 +297,7 @@ class MainWindow(QMainWindow):
                     e.error_message = None
                 self._show_entry(self._current_row)
 
-    # ---- conversion (Stage 3) ----
+    # ---- conversion (Stage 3, batch flow extracted in v0.5.0) ----
     def start_conversion(self) -> None:
         """Convert every file in the list, sequentially, in a worker thread.
 
@@ -262,7 +308,14 @@ class MainWindow(QMainWindow):
             return
         total = self._model.rowCount()
         tasks = [(row, self._model.entry_at(row)) for row in range(total)]
+        self._start_batch(tasks)
 
+    def _start_batch(self, tasks) -> None:
+        """Start one sequential batch from the given (row, entry) tasks."""
+        if self._converting or not tasks:
+            return
+        total = len(tasks)
+        self._batch_rows = [row for row, _ in tasks]
         self._set_converting(True)
         self.statusBar().showMessage(f"准备转换 {total} 个文件…")
 
@@ -287,7 +340,69 @@ class MainWindow(QMainWindow):
         self._worker.file_finished.connect(self._on_file_finished)
         self._worker.progress.connect(self._on_progress)
         self._worker.batch_finished.connect(self._on_batch_finished)
+        self._worker.batch_cancelled.connect(self._on_batch_cancelled)
+        self._batch_t0 = time.perf_counter()
         self._worker.start()
+
+    def _on_convert_selected(self) -> None:
+        """Convert only the currently selected rows (reset to WAITING first)."""
+        if self._converting:
+            return
+        rows = [i.row() for i in self._table.selectionModel().selectedRows()]
+        tasks = self._model.tasks_for_rows(rows)
+        if not tasks:
+            return
+        self._reset_rows([r for r, _ in tasks])
+        self._start_batch(tasks)
+
+    def _on_retry_failed(self) -> None:
+        """Re-run every ERROR / UNSUPPORTED row (reset to WAITING first)."""
+        if self._converting:
+            return
+        rows = self._model.retryable_rows()
+        if not rows:
+            return
+        self._reset_rows(rows)
+        self._start_batch(self._model.tasks_for_rows(rows))
+
+    def _on_cancel(self) -> None:
+        """Cooperative cancel: the current file finishes, the rest are skipped."""
+        if self._worker is not None:
+            self._worker.cancel()
+            self.statusBar().showMessage("正在取消…")
+
+    def _reset_rows(self, rows) -> None:
+        """Reset rows to WAITING and drop stale results / reports.
+
+        ``set_result`` only applies non-None values, so stale fields are
+        cleared by mutating the entry directly.
+        """
+        for row in rows:
+            self._model.set_status(row, FileStatus.WAITING)
+            entry = self._model.entry_at(row)
+            if entry is not None:
+                entry.markdown = None
+                entry.error_message = None
+            self._model.set_report(row, None)
+
+    def _finish_batch(self, cancelled: bool) -> None:
+        """Tear down a finished (or cancelled) batch and summarize it.
+
+        The summary counts ONLY the rows this batch was given (``_batch_rows``),
+        so a convert-selected / retry-failed batch never mixes in rows that
+        were not part of it.
+        """
+        self._set_converting(False)
+        elapsed = int((time.perf_counter() - self._batch_t0) * 1000)
+        entries = [self._model.entry_at(r) for r in self._batch_rows
+                   if self._model.entry_at(r) is not None]
+        summary = summarize(entries, elapsed)
+        self._last_summary = summary
+        self.statusBar().showMessage(summary_message(summary, cancelled=cancelled))
+        if self._worker is not None:
+            self._worker.deleteLater()
+            self._worker = None
+        self._update_action_states()
 
     def _on_file_started(self, row: int) -> None:
         self._model.set_status(row, FileStatus.PROCESSING)
@@ -317,6 +432,8 @@ class MainWindow(QMainWindow):
         # so it shows the just-finished conversion's diagnostics.
         if result.row == self._current_row:
             self._show_entry(result.row)
+        # Context actions (e.g. retry) may have become enabled/disabled.
+        self._update_action_states()
 
     def _record_diagnostic(self, result: ConversionResult) -> None:
         """Build a ``ConversionReport`` and persist it.
@@ -337,18 +454,41 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"已完成 {done} / {total}")
 
     def _on_batch_finished(self, success: int, failed: int) -> None:
-        self._set_converting(False)
-        self.statusBar().showMessage(f"转换完成：成功 {success}，失败 {failed}")
-        if self._worker is not None:
-            self._worker.deleteLater()
-            self._worker = None
+        self._finish_batch(False)
+
+    def _on_batch_cancelled(self, success: int, failed: int) -> None:
+        self._finish_batch(True)
 
     def _set_converting(self, on: bool) -> None:
         self._converting = on
-        for act in (self._act_add, self._act_remove, self._act_clear, self._act_convert, self._act_advanced):
+        for act in (
+            self._act_add,
+            self._act_remove,
+            self._act_clear,
+            self._act_convert,
+            self._act_advanced,
+            self._act_add_folder,
+            self._act_convert_selected,
+            self._act_retry_failed,
+            self._act_export_batch,
+        ):
             act.setEnabled(not on)
+        self._act_cancel.setEnabled(on)
         self._url_edit.setEnabled(not on)
         self._act_add_url.setEnabled(not on)
+
+    def _update_action_states(self) -> None:
+        """Enable/disable context-sensitive batch actions (v0.5.0)."""
+        converting = self._converting
+        selected = self._table.selectionModel().selectedRows()
+        self._act_convert_selected.setEnabled(not converting and bool(selected))
+        self._act_retry_failed.setEnabled(
+            not converting and bool(self._model.retryable_rows())
+        )
+        self._act_export_batch.setEnabled(
+            not converting and bool(self._model.done_rows())
+        )
+        self._act_cancel.setEnabled(converting)
 
     # ---- right panel: source / preview (Stage 4) ----
     def _build_content_panel(self) -> QWidget:
@@ -362,6 +502,8 @@ class MainWindow(QMainWindow):
         self._act_copy.triggered.connect(self._on_copy)
         self._act_export = bar.addAction("导出 .md")
         self._act_export.triggered.connect(self._on_export)
+        self._act_export_batch = bar.addAction("批量导出")
+        self._act_export_batch.triggered.connect(self._on_export_batch)
 
         tabs = QTabWidget()
         self._source_view = QPlainTextEdit()
@@ -387,6 +529,7 @@ class MainWindow(QMainWindow):
         else:
             self._current_row = None
             self._show_entry(None)
+        self._update_action_states()
 
     def _show_entry(self, row: int | None) -> None:
         if row is None or row < 0 or row >= self._model.rowCount():
@@ -453,6 +596,22 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "导出失败", f"写入失败：{e}")
             return
         self.statusBar().showMessage(f"已导出：{path}")
+
+    def _on_export_batch(self) -> None:
+        """Export all DONE entries to a chosen directory (v0.5.0)."""
+        if self._converting:
+            return
+        out_dir = QFileDialog.getExistingDirectory(self, "选择导出目录")
+        if not out_dir:
+            return  # user cancelled
+        entries = [self._model.entry_at(r) for r in range(self._model.rowCount())]
+        res = export_batch(entries, out_dir)
+        self.statusBar().showMessage(
+            f"批量导出完成：成功 {res.exported}，跳过冲突 {res.skipped_conflict}，失败 {res.failed}"
+        )
+        if res.failed > 0 and res.errors:
+            detail = "\n".join(res.errors)
+            QMessageBox.warning(self, "批量导出部分失败", detail)
 
     def _current_entry(self):
         if self._current_row is None:

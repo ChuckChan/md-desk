@@ -121,8 +121,11 @@ def test_mime_drag() -> None:
         mime.setUrls([QUrl.fromLocalFile(f), QUrl.fromLocalFile(d)])  # file + dir
         extracted = FileTableView.extract_local_files(mime)
         norm = lambda x: os.path.normcase(os.path.abspath(x))
-        check("10a. QMimeData+QUrl 提取(忽略文件夹)", extracted == [f] or [norm(x) for x in extracted] == [norm(f)],
-              f"extracted={extracted} expected={f}")
+        # v0.5.0: extract_local_files now KEEPS directories (they are routed to
+        # add_folder by the main window) instead of filtering them out.
+        check("10a. QMimeData+QUrl 提取(保留文件夹)",
+              [norm(x) for x in extracted] == [norm(f), norm(d)],
+              f"extracted={extracted} expected=[{f}, {d}]")
 
         table = FileTableView()
         model = FileModel()

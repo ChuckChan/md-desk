@@ -12,6 +12,7 @@ that represents both success and failure. Non-terminal signals
 Task shape: list of (row_index, FileEntry).
 """
 
+import threading
 import time
 
 from PySide6.QtCore import QThread, Signal
@@ -35,6 +36,7 @@ class ConversionWorker(QThread):
     file_finished = Signal(ConversionResult)   # (result) — unified terminal outcome
     progress = Signal(int, int)                # (done, total)
     batch_finished = Signal(int, int)          # (success_count, fail_count)
+    batch_cancelled = Signal(int, int)         # (success_count, fail_count)
 
     def __init__(
         self,
@@ -58,11 +60,24 @@ class ConversionWorker(QThread):
         self._quality_enabled = quality_enabled
         self._success = 0
         self._failed = 0
+        self._cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        """Cooperative cancel: current file finishes normally; remaining tasks
+        are not started. Safe to call from the GUI thread."""
+        self._cancel_event.set()
+
+    def is_cancelled(self) -> bool:
+        return self._cancel_event.is_set()
 
     def run(self) -> None:  # executed in the worker thread
         total = len(self._tasks)
         done = 0
+        cancelled = False
         for row, entry in self._tasks:
+            if self._cancel_event.is_set():
+                cancelled = True
+                break
             self.file_started.emit(row)
             t0 = time.perf_counter()
             try:
@@ -100,7 +115,10 @@ class ConversionWorker(QThread):
                 self._failed += 1
             done += 1
             self.progress.emit(done, total)
-        self.batch_finished.emit(self._success, self._failed)
+        if cancelled:
+            self.batch_cancelled.emit(self._success, self._failed)
+        else:
+            self.batch_finished.emit(self._success, self._failed)
 
 
 def _elapsed_ms(t0: float) -> int:

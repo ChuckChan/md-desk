@@ -14,7 +14,7 @@ Runtime code, the User-Agent, diagnostics, and the release scripts all import
 from this module instead of hardcoding a version string.
 """
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 APP_NAME = "MdDesk"
 

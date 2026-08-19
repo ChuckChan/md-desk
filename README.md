@@ -27,6 +27,7 @@ MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / W
   - AI is **off by default**. Once enabled, set endpoint / model in **Advanced Settings**; the API key is stored in the **Windows Credential Manager** — never written as plaintext, no Fernet fallback.
 - **Diagnostics panel (new in v0.4.0)**: a "Diagnostics" tab shows each file's conversion report (source, status, duration, output size) and, when quality inspection is on, quality warnings and error details. It never renders the Markdown body and has buttons to open the diagnostic log.
 - **Conversion quality check (new in v0.4.0, opt-in, off by default)**: when enabled in **Advanced Settings**, successful conversions run a lightweight static check (empty / abnormally short output, low text yield, garbled text, OCR-failure markers) and surface advisory warnings. It never changes the conversion result or status.
+- **Batch productivity (new in v0.5.0)**: import whole folders (recursive scan, dedup), convert only the selected files, retry only the failed (ERROR / UNSUPPORTED) items, export all successful results to a chosen directory (safe naming, never overwrites source files), cooperative cancel (the current file finishes, the rest stay pending), and a batch summary (total / success / quality hints / failed / not-executed / duration) shown when a batch ends.
 
 ## Requirements / Prerequisites
 
@@ -57,7 +58,7 @@ Tests (need the packaging venv + PySide6 available):
 
 ```bash
 pip install pytest
-pytest tests/ -q                    # 122 pytest cases, all pass
+pytest tests/ -q                    # 151 pytest cases, all pass
 python tests/test_file_model.py     # Stage 2 file model, 12 checks (script mode)
 python tests/test_audio_stage5.py   # audio / regression, 13 checks (script mode)
 ```

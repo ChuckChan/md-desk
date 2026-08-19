@@ -13,6 +13,7 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtWidgets import QApplication
 
 from .file_entry import FileEntry, FileStatus
+from .folder_scanner import collect_files
 
 
 _COLUMNS = ["文件名", "类型", "大小", "状态"]
@@ -134,6 +135,22 @@ class FileModel(QAbstractTableModel):
         self.endInsertRows()
         return 1, 0
 
+    def add_folder(self, path: str, recursive: bool = True) -> tuple[int, int]:
+        """Recursively add all regular files under ``path``.
+
+        Invalid path (nonexistent / not a directory) -> ``(0, 1)``; an empty
+        directory -> ``(0, 0)``. Otherwise ``collect_files`` gathers the files
+        in a deterministic order and the result is inserted through
+        ``add_paths`` so the existing dedup semantics apply unchanged.
+        Returns ``(added, skipped)``.
+        """
+        if not path or not os.path.isdir(path):
+            return 0, 1
+        files = collect_files(path, recursive=recursive)
+        if not files:
+            return 0, 0
+        return self.add_paths(files)
+
     def removeRows(self, row: int, count: int, parent: QModelIndex = QModelIndex()) -> bool:
         if parent.isValid() or count <= 0 or row < 0 or row + count > len(self._entries):
             return False
@@ -158,6 +175,30 @@ class FileModel(QAbstractTableModel):
         if 0 <= row < len(self._entries):
             return self._entries[row]
         return None
+
+    def retryable_rows(self) -> list[int]:
+        """Rows whose status is ERROR or UNSUPPORTED, in ascending order."""
+        return [
+            i for i, e in enumerate(self._entries)
+            if e.status in (FileStatus.ERROR, FileStatus.UNSUPPORTED)
+        ]
+
+    def done_rows(self) -> list[int]:
+        """Rows whose status is DONE and that have markdown, ascending."""
+        return [
+            i for i, e in enumerate(self._entries)
+            if e.status == FileStatus.DONE and e.markdown
+        ]
+
+    def tasks_for_rows(self, rows) -> list[tuple[int, FileEntry]]:
+        """Map row indices to ``(row, entry)`` tasks, ascending, skipping
+        invalid rows."""
+        tasks: list[tuple[int, FileEntry]] = []
+        for row in sorted(rows):
+            entry = self.entry_at(row)
+            if entry is not None:
+                tasks.append((row, entry))
+        return tasks
 
     def set_status(self, row: int, status: FileStatus) -> None:
         entry = self.entry_at(row)
