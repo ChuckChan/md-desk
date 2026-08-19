@@ -28,11 +28,18 @@
 
 ---
 
-## MdDesk v0.5.0（批量生产力版 / batch productivity）— 待发布
+## MdDesk v0.5.0（批量生产力版 / batch productivity）— 已发布
 
-**Status:** 待发布（实现 / 测试 / 冻结验证 / 独立 Review 全部完成；本地 release commit 已创建；未 tag / 未 push / 未创建 Release）
+**Status:** Released（已发布 / published，tag `v0.5.0` + GitHub Release，2026-08-19）
 **基线：** commit `7cf195e`（v0.4.1，已发布）
 **目标：** 在 v0.4.1 之上新增「批量生产力」六项功能；不改变 v0.4 默认行为、不升级 MarkItDown 0.1.7、不引入 v0.6 AI 能力。
+
+### 发布元数据
+- **Tag:** `v0.5.0`（annotated tag → commit `b4df24d`，release commit `6b8cd93`）
+- **GitHub Release:** https://github.com/ChuckChan/md-desk/releases/tag/v0.5.0
+- **正式资产：** `MdDesk-v0.5.0-Windows-x64.zip` — 164,880,155 bytes (~157.2 MB)
+- **SHA-256：** `0f22ed0c0b16c75143ba8f5cd6aaef2a2103321cfd65dc396ec557ce7b5b22c6`
+- **本地冻结 SHA 与 GitHub 下载 SHA 完全一致** ✅
 
 ### 新增功能（6 项）
 1. **文件夹导入**：支持选择 / 拖入文件夹，递归扫描（确定顺序）；忽略目录本身；按规范化路径去重；既有文件导入行为不变。

@@ -48,7 +48,7 @@
 ## 4. Release URL
 
 - **Release URL:** https://github.com/ChuckChan/md-desk/releases/tag/v0.5.0
-- **Asset download URL:** https://github.com/ChuckChan/md-desk/releases/download/v0.5.0/MdDesk-0.5.0-Windows-x64.zip
+- **Asset download URL:** https://github.com/ChuckChan/md-desk/releases/download/v0.5.0/MdDesk-v0.5.0-Windows-x64.zip
 - **isDraft:** false ✅（正式发布）
 - **tagName:** v0.5.0 ✅
 - **assetState:** uploaded ✅
@@ -59,7 +59,7 @@
 
 | 项目 | 值 |
 |---|---|
-| ZIP 文件名 | `MdDesk-0.5.0-Windows-x64.zip` |
+| ZIP 文件名 | `MdDesk-v0.5.0-Windows-x64.zip` |
 | ZIP 根目录 | `MdDesk-0.5.0` |
 | ZIP 大小 | 164,880,155 bytes (~157.2 MB) |
 | dist 内文件数 | 1,151 |
@@ -85,7 +85,7 @@
 | Task ID | 名称 | 命令 | 状态 | 耗时 | Exit Code | 日志/产物 |
 |---|---|---|---|---|---|---|
 | bKBVOM | Product Build | `pyinstaller --noconfirm --distpath dist_v050 --workpath build_v050 md-desk.spec` | **PASS** | 7m8s | 0 | `build_v050_log.txt`, `dist_v050/md-desk/md-desk.exe` |
-| (前台) | ZIP 打包 | `python make_dist_zip_v050.py` | **PASS** | <5s | 0 | `MdDesk-0.5.0-Windows-x64.zip` |
+| (前台) | ZIP 打包 | `python make_dist_zip_v050.py` | **PASS** | <5s | 0 | `MdDesk-v0.5.0-Windows-x64.zip`（原名缺 `v` 前缀，发布卫生收口时已重命名纠正） |
 | (前台) | Verify | `python verify_dist_zip.py` | **PASS** | ~20s | 0 | SHA-256 + 结构 + 内容审计 + 启动验证 全通过 |
 | (前台) | Tag 创建 | `git tag -a v0.5.0 -m "..."` | **PASS** | <1s | 0 | annotated tag → b4df24d |
 | (前台) | Push main+tag | `git push origin main && git push origin v0.5.0` | **PASS** | <5s | 0 | remote main=b4df24d, tag=v0.5.0 |
@@ -94,6 +94,9 @@
 | (前台) | 重建 Release | `gh release create v0.5.0 --title ... --notes-file ...` | **PASS** | <3s | 0 | Release URL 获取成功 |
 | j36BGr | Upload ZIP | `gh release upload v0.5.0 ZIP --clobber` | **PASS** | 5m31s | 0 | asset state=uploaded |
 | 4cEZlk | Download SHA | `gh release download v0.5.0 --dir download_v050 --clobber` | **PASS** | 1m19s | 0 | 下载文件 SHA 与本地一致 |
+| 3SjFnm | Upload 正确名称 ZIP | `gh release upload v0.5.0 "MdDesk-v0.5.0-Windows-x64.zip" --clobber` | **PASS** | 5m28s | 0 | correct-name asset uploaded |
+| dsz8eI | Download 正确名称 SHA | `gh release download v0.5.0 --dir download_v050_renamed --pattern "MdDesk-v0.5.0-Windows-x64.zip" --clobber` | **PASS** | 1m25s | 0 | SHA-256 = 冻结值 ✅ |
+| (前台) | 删除旧资产 | `gh release delete-asset v0.5.0 "MdDesk-0.5.0-Windows-x64.zip" --yes` | **PASS** | <2s | 0 | Release assetCount=1 |
 
 **状态机汇总：** 无 WAITING / RUNNING / LOST 任务。全部 PASS。
 
@@ -118,6 +121,13 @@
 - **根因:** Asset 名称为 `MdDesk-0.5.0-Windows-x64.zip`（版本号无 `v` 前缀），pattern 中使用了 `v0.5.0` 导致不匹配。
 - **修复:** 不使用 `--pattern`，直接下载所有 assets: `gh release download v0.5.0 --dir download_v050 --clobber` → PASS
 - **重验:** 下载文件 SHA-256 = 本地冻结 SHA-256 ✅
+
+### 收口修正: 资产命名纠正（release hygiene）
+
+- **现象:** 发布后资产名为 `MdDesk-0.5.0-Windows-x64.zip`（版本号缺 `v` 前缀），与既定命名规范 `MdDesk-v0.5.0-Windows-x64.zip`（同 v0.4.0 / v0.4.1）不一致。
+- **根因:** `make_dist_zip_v050.py` 中 ZIP 外部文件名使用了版本号字符串 `0.5.0` 而非 `v0.5.0`。
+- **修复（不改 ZIP bytes）:** 本地 `cp "MdDesk-0.5.0-Windows-x64.zip" "MdDesk-v0.5.0-Windows-x64.zip"`（纯文件重命名，SHA-256 不变）；`gh release upload v0.5.0 "MdDesk-v0.5.0-Windows-x64.zip" --clobber` 上传正确名称资产；下载校验 SHA-256 一致后删除旧资产 `MdDesk-0.5.0-Windows-x64.zip`。
+- **重验:** 下载 `MdDesk-v0.5.0-Windows-x64.zip` SHA-256 = `0f22ed0c...b5b22c6` ✅；Release 最终仅保留唯一正确名称资产 ✅
 
 ---
 
@@ -160,7 +170,7 @@
 - Remote main = `b4df24d` ✅
 - Remote tag v0.5.0 → `b4df24d` ✅
 - GitHub Release published (isDraft=false) ✅
-- Asset `MdDesk-0.5.0-Windows-x64.zip` uploaded (164,880,155 bytes) ✅
+- Asset `MdDesk-v0.5.0-Windows-x64.zip` uploaded (164,880,155 bytes) ✅
 - SHA-256 一致 ✅
 - 所有 Background Task PASS，无 WAITING/RUNNING/LOST ✅
 - 未提交临时产物 ✅
