@@ -34,37 +34,87 @@ from typing import Any, Optional
 
 
 # --------------------------------------------------------------------------
-# AI configuration (v0.3 — AI-enhanced conversion: LLM image description +
-# official markitdown-ocr plugin).
+# AI configuration (v0.3 — AI-enhanced conversion; extended in v0.6).
 #
 # IMPORTANT: the API Key is NEVER stored here. It lives in Windows Credential
 # Manager (see credential_store.py). ``AIConfig`` only carries the
 # user-facing, non-secret knobs. This keeps settings.json safe to inspect /
 # share and satisfies the v0.3 "no plaintext key" requirement.
+#
+# v0.6 additions (all optional keys with safe defaults -> old v0.2–v0.5
+# settings files load unchanged, per the quality_enabled precedent):
+#   * provider                    -> only "openai-compatible" in v0.6
+#   * timeout_seconds             -> finite timeout for ALL AI network calls
+#   * ocr_enabled                 -> independent OCR on/off
+#   * image_description_enabled   -> independent image-description on/off
 # --------------------------------------------------------------------------
+# The one provider v0.6 supports. Declared here (not in ai_provider) so the
+# settings layer stays import-cycle-free.
+PROVIDER_OPENAI_COMPATIBLE = "openai-compatible"
+
+# Bounds for the AI network timeout (seconds). Anything outside is clamped;
+# invalid values fall back to the default. Guarantees every AI call is finite.
+AI_TIMEOUT_DEFAULT_SECONDS = 60.0
+AI_TIMEOUT_MIN_SECONDS = 1.0
+AI_TIMEOUT_MAX_SECONDS = 600.0
+
+
+def normalize_ai_timeout(value: object) -> float:
+    """Coerce ``value`` into a sane finite timeout in seconds.
+
+    Accepts int/float (bool excluded); anything else — None, strings, NaN,
+    non-positive, out-of-range — becomes the default. Never raises.
+    """
+    if isinstance(value, bool):
+        return AI_TIMEOUT_DEFAULT_SECONDS
+    if isinstance(value, (int, float)):
+        try:
+            f = float(value)
+        except (TypeError, ValueError, OverflowError):
+            return AI_TIMEOUT_DEFAULT_SECONDS
+        if f != f:  # NaN
+            return AI_TIMEOUT_DEFAULT_SECONDS
+        return min(max(f, AI_TIMEOUT_MIN_SECONDS), AI_TIMEOUT_MAX_SECONDS)
+    return AI_TIMEOUT_DEFAULT_SECONDS
+
+
 @dataclass
 class AIConfig:
     """Non-secret AI connection settings shown in 高级设置.
 
     ``enabled``  -> master switch for all AI features (image description + OCR).
+    ``provider`` -> v0.6: always "openai-compatible" (single supported backend).
     ``endpoint`` -> OpenAI-compatible base_url. Empty -> default OpenAI.
     ``model``    -> model id (e.g. gpt-4o). Required for vision calls.
+    ``timeout_seconds`` -> finite per-request timeout (default 60 s, clamped
+                    to [1, 600]).
     ``prompt``   -> optional custom prompt. Empty -> official defaults for BOTH
                     image description and OCR (prompt is NOT force-shared; each
                     backend falls back to its own default when this is blank).
+    ``ocr_enabled`` / ``image_description_enabled`` -> v0.6 independent
+                    capability toggles (both default True so a migrated
+                    v0.3–v0.5 "AI on" config keeps its old behavior).
     """
 
     enabled: bool = False
+    provider: str = PROVIDER_OPENAI_COMPATIBLE
     endpoint: str = ""
     model: str = ""
+    timeout_seconds: float = AI_TIMEOUT_DEFAULT_SECONDS
     prompt: str = ""
+    ocr_enabled: bool = True
+    image_description_enabled: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
+            "provider": self.provider,
             "endpoint": self.endpoint,
             "model": self.model,
+            "timeout_seconds": self.timeout_seconds,
             "prompt": self.prompt,
+            "ocr_enabled": self.ocr_enabled,
+            "image_description_enabled": self.image_description_enabled,
         }
 
     @classmethod
@@ -73,17 +123,34 @@ class AIConfig:
             return cls()
         try:
             enabled = bool(data.get("enabled", False))
+            provider = data.get("provider", PROVIDER_OPENAI_COMPATIBLE)
             endpoint = data.get("endpoint", "")
             model = data.get("model", "")
+            timeout_seconds = normalize_ai_timeout(data.get(
+                "timeout_seconds", AI_TIMEOUT_DEFAULT_SECONDS))
             prompt = data.get("prompt", "")
+            ocr_enabled = bool(data.get("ocr_enabled", True))
+            image_description_enabled = bool(
+                data.get("image_description_enabled", True))
             # Keep only real strings; drop anything malformed.
+            if not isinstance(provider, str) or not provider.strip():
+                provider = PROVIDER_OPENAI_COMPATIBLE
+            # Unknown provider ids are normalized to the only supported one
+            # (forward compatibility: a future settings file that carries a
+            # not-yet-supported provider degrades gracefully instead of
+            # breaking conversion).
+            if provider.strip().lower() != PROVIDER_OPENAI_COMPATIBLE:
+                provider = PROVIDER_OPENAI_COMPATIBLE
             if not isinstance(endpoint, str):
                 endpoint = ""
             if not isinstance(model, str):
                 model = ""
             if not isinstance(prompt, str):
                 prompt = ""
-            return cls(enabled=enabled, endpoint=endpoint, model=model, prompt=prompt)
+            return cls(enabled=enabled, provider=provider, endpoint=endpoint,
+                       model=model, timeout_seconds=timeout_seconds,
+                       prompt=prompt, ocr_enabled=ocr_enabled,
+                       image_description_enabled=image_description_enabled)
         except Exception:  # noqa: BLE001 - any surprise -> safe default
             return cls()
 

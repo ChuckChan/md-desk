@@ -80,6 +80,11 @@ class ConversionWorker(QThread):
                 break
             self.file_started.emit(row)
             t0 = time.perf_counter()
+            # v0.6: advisory warnings from AI failure isolation (downgrade to
+            # non-AI conversion) are collected here and attached to the
+            # result — success OR failure — so they reach the report,
+            # diagnostics panel and diagnostic log.
+            ai_warnings: list = []
             try:
                 # Network access (URL entries) happens here, OFF the GUI
                 # thread, so the UI stays responsive.
@@ -91,22 +96,24 @@ class ConversionWorker(QThread):
                     entry,
                     settings=self._settings,
                     engine_config=self._engine_config,
+                    warnings_out=ai_warnings,
                 )
                 duration_ms = _elapsed_ms(t0)
                 # Quality is advisory only and runs solely on success. When OFF
                 # (default) we skip it entirely, so the result is identical to
                 # S1. When ON, we feed the output + known input size to the
                 # inspector and attach any warnings to the result.
-                warnings = ()
+                warnings: tuple = tuple(ai_warnings)
                 if self._quality_enabled:
                     size = entry.size if getattr(entry, "size", 0) > 0 else None
-                    warnings = _INSPECTOR.inspect(markdown, input_size=size)
+                    warnings = warnings + _INSPECTOR.inspect(markdown, input_size=size)
                 result = ConversionResult.success(
                     row, markdown, duration_ms=duration_ms, warnings=warnings
                 )
             except ConversionError as exc:
                 result = ConversionResult.from_error(
-                    row, exc, duration_ms=_elapsed_ms(t0)
+                    row, exc, duration_ms=_elapsed_ms(t0),
+                    warnings=tuple(ai_warnings),
                 )
             self.file_finished.emit(result)
             if result.ok:

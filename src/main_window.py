@@ -319,11 +319,13 @@ class MainWindow(QMainWindow):
         self._set_converting(True)
         self.statusBar().showMessage(f"准备转换 {total} 个文件…")
 
-        # Resolve the runtime engine config ONCE (v0.3). If AI is enabled but
-        # the official OCR plugin is missing, surface a clear, non-fatal
-        # warning: image description still works, only scan/OCR is unavailable.
+        # Resolve the runtime engine config ONCE (v0.3). If AI is enabled AND
+        # the user wants OCR but the official OCR plugin is missing, surface a
+        # clear, non-fatal warning: image description still works, only
+        # scan/OCR is unavailable. (v0.6: respects the independent OCR toggle.)
         engine_config = EngineConfig.from_settings(self._settings)
-        if engine_config.ai_enabled and not engine_config.ocr_plugin_available:
+        if (engine_config.ai_enabled and engine_config.ai_ocr_enabled
+                and not engine_config.ocr_plugin_available):
             QMessageBox.warning(
                 self,
                 "AI 已启用，但 OCR 插件缺失",

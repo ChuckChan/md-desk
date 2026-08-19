@@ -9,6 +9,7 @@ import Qt or any GUI module.
 """
 
 from io import BytesIO
+import time
 
 from markitdown import (
     MarkItDown,
@@ -21,6 +22,7 @@ from markitdown import (
 from .engine_config import EngineConfig
 from .file_entry import FileEntry, FileStatus
 from .markitdown_factory import MarkItDownFactory
+from .result import QualityWarning
 from .settings import Settings, StreamInfoOverride
 from .url_fetch_service import FetchError, FetchErrorCategory, UrlFetchService
 
@@ -206,10 +208,68 @@ def markdown_has_ocr_error(markdown: str) -> bool:
     return OCR_ERROR_MARKER in (markdown or "")
 
 
+# Stable warning code for "the AI call failed and the conversion was
+# automatically downgraded to the non-AI path" (v0.6 error isolation).
+AI_PROVIDER_FAILURE_CODE = "AI_PROVIDER_FAILURE"
+
+
+def _ai_fallback_warning(cfg: EngineConfig, ai_msg: str, duration_ms: int) -> QualityWarning:
+    """Build the advisory warning attached when an AI failure is isolated.
+
+    Carries the diagnostic dimensions required by the v0.6 plan (§4.5):
+    provider / capability context / duration / sanitized error — but NEVER
+    the API key, an Authorization header, or a secret-bearing URL.
+    """
+    provider = getattr(cfg, "ai_provider", "openai-compatible") or "openai-compatible"
+    model = getattr(cfg, "ai_model", "") or "未知模型"
+    return QualityWarning(
+        AI_PROVIDER_FAILURE_CODE,
+        f"AI 调用失败，已自动降级为无 AI 转换（provider={provider}, "
+        f"model={model}, 降级耗时={duration_ms}ms）：{ai_msg}",
+    )
+
+
+def _convert_with_ai_fallback(call, cfg: EngineConfig, warnings_out: "list | None"):
+    """Run ``call(engine_config) -> markdown`` with v0.6 AI error isolation.
+
+    When the conversion fails with an AI-classified error (auth / connection /
+    timeout / quota raised through the OpenAI-compatible client) while AI is
+    enabled, the SAME conversion is retried once with AI fully disabled:
+
+      * retry succeeds -> the non-AI result is returned and an
+        ``AI_PROVIDER_FAILURE`` warning is appended to ``warnings_out`` (when
+        provided). The file still converts — an AI outage must never break
+        ordinary document conversion (plan §3.4).
+      * retry fails too -> the retry's (real) conversion error is raised;
+        the AI failure stays chained as the cause for diagnostics.
+
+    Non-AI failures never trigger a retry. The OCR plugin already fails soft
+    (inline ``*[OCR Error]*`` blocks) and is unaffected by this path.
+    """
+    try:
+        return call(cfg)
+    except Exception as exc:  # noqa: BLE001 - all failures mapped below
+        ai_msg = _classify_ai_error(exc) if cfg.ai_enabled else None
+        if ai_msg is None:
+            status, message = map_exception(exc)
+            raise ConversionError(status, message) from exc
+        t0 = time.perf_counter()
+        try:
+            markdown = call(EngineConfig.disabled())
+        except Exception as exc2:  # noqa: BLE001 - the real conversion error
+            status, message = map_exception(exc2)
+            raise ConversionError(status, message) from exc
+        if warnings_out is not None:
+            duration_ms = int((time.perf_counter() - t0) * 1000)
+            warnings_out.append(_ai_fallback_warning(cfg, ai_msg, duration_ms))
+        return markdown
+
+
 def convert_file(
     path: str,
     override: StreamInfoOverride | None = None,
     engine_config: EngineConfig | None = None,
+    warnings_out: "list | None" = None,
 ) -> str:
     """Convert a single local file to Markdown.
 
@@ -219,6 +279,11 @@ def convert_file(
     When ``engine_config`` (v0.3) is provided and AI is enabled, the engine is
     built via ``MarkItDownFactory`` with the shared LLM client + OCR plugin.
     When ``None`` the v0.2-equivalent configuration is used.
+
+    ``warnings_out`` (v0.6, optional): a list that receives advisory
+    ``QualityWarning`` objects — currently only the AI_PROVIDER_FAILURE notice
+    emitted when an AI failure was isolated and the conversion downgraded.
+    Pass the worker's list to surface it in the result / report / diagnostics.
 
     Stage 4 (advanced): when ``override`` is supplied and non-empty, the file
     is converted via ``convert_stream`` with a StreamInfo that merges the
@@ -231,11 +296,11 @@ def convert_file(
 
     if override is None or override.is_empty():
         # Legacy path — identical to pre-Stage-4 behavior (v0.2 when AI off).
-        try:
-            return MarkItDownFactory.create(cfg).convert(path).markdown
-        except Exception as exc:  # noqa: BLE001 - map all failures to ERROR/UNSUPPORTED
-            status, message = map_exception(exc)
-            raise ConversionError(status, message) from exc
+
+        def _plain(engine: EngineConfig) -> str:
+            return MarkItDownFactory.create(engine).convert(path).markdown
+
+        return _convert_with_ai_fallback(_plain, cfg, warnings_out)
 
     # Advanced override path.
     from pathlib import Path as _Path  # local import keeps module top clean
@@ -249,12 +314,16 @@ def convert_file(
             filename=_Path(path).name,
         )
         merged = base.copy_and_update(**override.as_kwargs())
-        return MarkItDownFactory.create(cfg).convert_stream(
-            BytesIO(data), stream_info=merged
-        ).markdown
-    except Exception as exc:  # noqa: BLE001 - map all failures to ERROR/UNSUPPORTED
+    except Exception as exc:  # noqa: BLE001 - I/O error reading the file
         status, message = map_exception(exc)
         raise ConversionError(status, message) from exc
+
+    def _overridden(engine: EngineConfig) -> str:
+        return MarkItDownFactory.create(engine).convert_stream(
+            BytesIO(data), stream_info=merged
+        ).markdown
+
+    return _convert_with_ai_fallback(_overridden, cfg, warnings_out)
 
 
 def _fetch_message(exc: FetchError) -> str:
@@ -281,6 +350,7 @@ def convert_url(
     override: StreamInfoOverride | None = None,
     youtube_languages: list[str] | None = None,
     engine_config: EngineConfig | None = None,
+    warnings_out: "list | None" = None,
 ) -> str:
     """Safely fetch a remote http/https URL and convert it to Markdown.
 
@@ -296,6 +366,10 @@ def convert_url(
         ``youtube_transcript_languages`` kwarg so the user can prefer specific
         caption languages. Empty/None -> not forwarded (legacy behavior).
 
+    ``warnings_out`` (v0.6): optional list receiving advisory warnings when an
+    AI failure is isolated and the conversion downgraded (same contract as
+    ``convert_file``).
+
     Returns the markdown string. Raises ConversionError on failure.
     """
     svc = service or UrlFetchService()
@@ -303,31 +377,31 @@ def convert_url(
         result = svc.fetch(url)
     except FetchError as exc:
         raise ConversionError(FileStatus.ERROR, _fetch_message(exc)) from exc
-    try:
-        stream_info = result.stream_info
-        if override is not None and not override.is_empty():
-            # copy_and_update merges only non-None fields, so the fetched
-            # url/filename/extension survive unless explicitly overridden.
-            stream_info = stream_info.copy_and_update(**override.as_kwargs())
+    stream_info = result.stream_info
+    if override is not None and not override.is_empty():
+        # copy_and_update merges only non-None fields, so the fetched
+        # url/filename/extension survive unless explicitly overridden.
+        stream_info = stream_info.copy_and_update(**override.as_kwargs())
 
-        kwargs: dict = {}
-        if youtube_languages:
-            kwargs["youtube_transcript_languages"] = list(youtube_languages)
+    kwargs: dict = {}
+    if youtube_languages:
+        kwargs["youtube_transcript_languages"] = list(youtube_languages)
 
-        return MarkItDownFactory.create(
-            engine_config or EngineConfig.disabled()
-        ).convert_stream(
+    cfg = engine_config or EngineConfig.disabled()
+
+    def _engine_convert(engine: EngineConfig) -> str:
+        return MarkItDownFactory.create(engine).convert_stream(
             result.content, stream_info=stream_info, **kwargs
         ).markdown
-    except Exception as exc:  # noqa: BLE001 - map engine failures to ERROR/UNSUPPORTED
-        status, message = map_exception(exc)
-        raise ConversionError(status, message) from exc
+
+    return _convert_with_ai_fallback(_engine_convert, cfg, warnings_out)
 
 
 def convert_entry(
     entry: FileEntry,
     settings: Settings | None = None,
     engine_config: EngineConfig | None = None,
+    warnings_out: "list | None" = None,
 ) -> str:
     """Convert a FileEntry, dispatching to URL or local-file handling.
 
@@ -343,6 +417,10 @@ def convert_entry(
     The per-entry ``stream_info_override`` (from the Advanced Settings dialog)
     is always applied when present. With no config and no per-entry override
     the behavior is exactly the legacy conversion flow.
+
+    ``warnings_out`` (v0.6): optional list receiving advisory warnings from
+    AI failure isolation; the worker forwards them into the
+    ConversionResult / ConversionReport / diagnostics.
     """
     cfg = engine_config or (
         EngineConfig.from_settings(settings) if settings else EngineConfig.disabled()
@@ -356,9 +434,11 @@ def convert_entry(
             override=getattr(entry, "stream_info_override", None),
             youtube_languages=langs,
             engine_config=cfg,
+            warnings_out=warnings_out,
         )
     return convert_file(
         entry.path,
         override=getattr(entry, "stream_info_override", None),
         engine_config=cfg,
+        warnings_out=warnings_out,
     )

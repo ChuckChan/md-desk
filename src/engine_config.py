@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from . import credential_store
-from .settings import Settings
+from .ai_provider import AIProviderConfig
+from .settings import AI_TIMEOUT_DEFAULT_SECONDS, PROVIDER_OPENAI_COMPATIBLE, Settings
 
 
 def is_ocr_plugin_available() -> bool:
@@ -48,10 +49,14 @@ class EngineConfig:
     """
 
     ai_enabled: bool = False
+    ai_provider: str = PROVIDER_OPENAI_COMPATIBLE  # v0.6: "openai-compatible"
     ai_endpoint: str = ""  # OpenAI-compatible base_url (e.g. https://api.openai.com/v1)
     ai_api_key: str = ""  # resolved from Windows Credential Manager
     ai_model: str = ""  # e.g. gpt-4o
+    ai_timeout: float = AI_TIMEOUT_DEFAULT_SECONDS  # v0.6: finite per-request timeout (s)
     ai_prompt: Optional[str] = None  # None -> official defaults for both OCR & image desc
+    ai_ocr_enabled: bool = True  # v0.6: independent OCR capability toggle
+    ai_image_description_enabled: bool = True  # v0.6: independent description toggle
     ocr_plugin_available: bool = False
 
     # Internal, non-serialized cache of the constructed OpenAI-compatible
@@ -70,6 +75,8 @@ class EngineConfig:
         Resolves the API Key from Windows Credential Manager (absent -> empty
         string, which the factory turns into a placeholder so a misconfigured
         endpoint still produces a clear auth error rather than crashing).
+        New v0.6 fields (provider / timeout / capability toggles) default so
+        that a pre-v0.6 settings file keeps its exact old behavior.
         """
         if settings is None or not getattr(settings, "ai", None) or not settings.ai.enabled:
             return cls.disabled()
@@ -83,14 +90,37 @@ class EngineConfig:
 
         return cls(
             ai_enabled=True,
+            ai_provider=getattr(settings.ai, "provider", PROVIDER_OPENAI_COMPATIBLE)
+            or PROVIDER_OPENAI_COMPATIBLE,
             ai_endpoint=settings.ai.endpoint or "",
             ai_api_key=key,
             ai_model=settings.ai.model or "",
+            ai_timeout=getattr(settings.ai, "timeout_seconds", AI_TIMEOUT_DEFAULT_SECONDS),
             ai_prompt=(settings.ai.prompt or None),
+            ai_ocr_enabled=bool(getattr(settings.ai, "ocr_enabled", True)),
+            ai_image_description_enabled=bool(
+                getattr(settings.ai, "image_description_enabled", True)),
             ocr_plugin_available=is_ocr_plugin_available(),
         )
 
     def should_enable_ocr(self) -> bool:
-        """OCR converters should be registered only when AI is on AND the
-        official plugin is importable."""
-        return self.ai_enabled and self.ocr_plugin_available
+        """OCR converters should be registered only when AI is on, the user
+        enabled the OCR capability, and the official plugin is importable."""
+        return self.ai_enabled and self.ai_ocr_enabled and self.ocr_plugin_available
+
+    def should_enable_image_description(self) -> bool:
+        """The built-in LLM image description runs only when AI is on and the
+        user enabled the image-description capability."""
+        return self.ai_enabled and self.ai_image_description_enabled
+
+    def to_provider_config(self) -> AIProviderConfig:
+        """The resolved provider connection (for the client factory and the
+        connection test). Never persists or logs the key."""
+        return AIProviderConfig(
+            provider=self.ai_provider,
+            api_key=self.ai_api_key,
+            endpoint=self.ai_endpoint,
+            model=self.ai_model,
+            timeout_seconds=self.ai_timeout,
+            prompt=self.ai_prompt,
+        )

@@ -250,7 +250,11 @@ def _run_all() -> bool:
     ok &= _check("5b. OCR 后端确实被调用", len(client_pdf.calls) > 0,
                  f"calls={len(client_pdf.calls)}")
 
-    # 6. AI error classification (CRITICAL: FileConversionException.attempts) --
+    # 6. AI error classification + v0.6 error isolation --
+    # v0.6 contract change (plan §3.4): an AI failure during image
+    # description must NO LONGER fail the whole conversion. The converter
+    # downgrades to the non-AI path and attaches an AI_PROVIDER_FAILURE
+    # warning carrying the classified Chinese message.
     for kind, needle in (
         ("auth", "鉴权失败"),
         ("ratelimit", "额度或频率"),
@@ -261,15 +265,26 @@ def _run_all() -> bool:
             ai_enabled=True, ai_endpoint="", ai_api_key="", ai_model="gpt-4o"
         )
         cfg_e._client = MockOpenAIClient(exc=_mk_openai_error(kind))
-        try:
-            convert_file(str(png), engine_config=cfg_e)
-            ok &= _check(f"6.{kind} 抛出异常", False, "未抛错")
-        except ConversionError as e:
-            ok &= _check(
-                f"6.{kind} 友好提示({needle})",
-                e.status == FileStatus.ERROR and needle in e.message,
-                f"status={e.status} msg={e.message[:80]}",
-            )
+        warns6 = []
+        md6 = convert_file(str(png), engine_config=cfg_e, warnings_out=warns6)
+        ok &= _check(
+            f"6.{kind} 降级成功(不抛错)",
+            isinstance(md6, str),
+            "unexpected ConversionError",
+        )
+        ok &= _check(
+            f"6.{kind} 友好提示({needle})",
+            any(
+                w.code == "AI_PROVIDER_FAILURE" and needle in w.message
+                for w in warns6
+            ),
+            f"warnings={[w.code for w in warns6]}",
+        )
+        ok &= _check(
+            f"6.{kind} 提示不含模型输出描述",
+            "Description:" not in md6,
+            "downgraded output still carries a description",
+        )
 
     # 7. OCR backend failure -> embedded classified markdown, no crash --------
     cfg_ocr_err = EngineConfig(
