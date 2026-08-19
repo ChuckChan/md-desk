@@ -326,12 +326,14 @@ class MainWindow(QMainWindow):
         engine_config = EngineConfig.from_settings(self._settings)
         if (engine_config.ai_enabled
                 and not (engine_config.ai_model or "").strip()):
-            QMessageBox.warning(
-                self,
-                "AI 已启用，但未配置模型名",
-                "AI 已启用，但模型名（Model）为空：\n"
-                "OCR 与图片描述都需要有效的模型名才能调用，将不可用。\n"
-                "请在「高级设置 → AI」中填写模型名，或用「测试连接」验证。",
+            # Non-modal on purpose: a modal QMessageBox here would block
+            # headless/automated runs forever whenever the persisted settings
+            # have AI on with an empty model, and would re-prompt on every
+            # batch. Per-file AI failures already surface as
+            # AI_PROVIDER_FAILURE warnings in the result/report.
+            self.statusBar().showMessage(
+                "AI 已启用但未配置模型名：OCR 与图片描述将不可用（高级设置 → AI）",
+                10000,
             )
         if (engine_config.ai_enabled and engine_config.ai_ocr_enabled
                 and not engine_config.ocr_plugin_available):
