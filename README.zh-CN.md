@@ -2,14 +2,16 @@
 
 > 基于 Microsoft MarkItDown 的文档转 Markdown 桌面工具（非官方、无关联）。
 
+![版本](https://img.shields.io/github/v/release/ChuckChan/md-desk?label=版本&color=blue) ![License](https://img.shields.io/github/license/ChuckChan/md-desk?color=green) ![平台](https://img.shields.io/badge/平台-Windows%20x64-0078D4)
+
 [English](README.md)
 
 MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / PowerPoint / HTML / 纯文本 / CSV / Outlook `.msg` / 安全的远程 URL / 音频 等）批量转换为 Markdown。底层转换由 [Microsoft MarkItDown](https://github.com/microsoft/markitdown) 驱动；MdDesk 只是它的图形界面封装，与 Microsoft 无关联。
 
 ## 下载与运行
 
-- 前往 **Releases** 下载 `MdDesk-v0.4.0-Windows-x64.zip`
-- 解压后**整个文件夹**一起拷贝到目标机器
+- 前往 **[Releases](https://github.com/ChuckChan/md-desk/releases/latest)** 下载 `MdDesk-v0.5.0-Windows-x64.zip`
+- 解压后把**整个文件夹**拷贝到目标机器
 - 双击 `md-desk.exe` 启动
 
 > ⚠️ 不能只复制 `md-desk.exe`，必须保留同目录的 `_internal/`（内含 Python 运行环境、Qt 库与转换引擎）。

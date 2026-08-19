@@ -2,14 +2,16 @@
 
 > A desktop tool that converts documents to Markdown, built on Microsoft MarkItDown (unofficial, not affiliated).
 
+![Version](https://img.shields.io/github/v/release/ChuckChan/md-desk?label=version&color=blue) ![License](https://img.shields.io/github/license/ChuckChan/md-desk?color=green) ![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D4)
+
 [简体中文](README.zh-CN.md)
 
 MdDesk is a Windows desktop GUI that batch-converts many document types (PDF / Word / Excel / PowerPoint / HTML / plain text / CSV / Outlook `.msg` / safe remote URLs / audio, etc.) into Markdown. The conversion engine is [Microsoft MarkItDown](https://github.com/microsoft/markitdown); MdDesk is only its graphical wrapper and is not affiliated with Microsoft.
 
 ## Download & Run
 
-- Go to **Releases** and download `MdDesk-v0.4.0-Windows-x64.zip`
-- Copy the **entire extracted folder** to the target machine
+- Go to **[Releases](https://github.com/ChuckChan/md-desk/releases/latest)** and download `MdDesk-v0.5.0-Windows-x64.zip`
+- Extract the ZIP and copy the **entire folder** to the target machine
 - Double-click `md-desk.exe` to launch
 
 > ⚠️ Do not copy `md-desk.exe` alone — keep the sibling `_internal/` directory (it contains the Python runtime, Qt libraries, and the conversion engine).
