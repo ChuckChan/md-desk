@@ -94,7 +94,11 @@
 
 ## 10. commit SHA + git status
 
-（提交后回填）本地 release commit 与完成报告 commit，见下文 git log；提交内容仅含：src 4 文件 + 3 新模块 + tests（1 改 + 8 新）+ README×3 + RELEASE.md + 完成报告。**未包含**：spec、build_*/dist_*、*.log、`_inspect_pyz.py`、`make_dist_zip_v041.py`、`download_sha_v041.sh`、`make_release_v041.sh`、`release_notes_v041.md`、`执行报告_*.md`、`MdDesk-*.zip`、`v050_design.md`（工作区文档）。
+- **release commit**：`6b8cd93b95d4b7e016d5e5dc61539f8e95ecf3fc` — `release: MdDesk v0.5.0 (batch productivity)`（20 files, +1864/-25）
+- **完成报告 commit**：`e811f63e978018cefa2244861670c98a4d0cc5c9` — `docs: add MdDesk v0.5.0 completion report`（仅报告文件）
+- 均为**本地提交**：未 tag / 未 push / 未创建 Release（按指示）。HEAD = `e811f63`。
+- 提交内容仅含：src 4 文件 + 3 新模块 + tests（1 改 + 8 新）+ README×3 + RELEASE.md + 完成报告。**未包含**：spec、build_*/dist_*、*.log、`_inspect_pyz.py`、`make_dist_zip_v041.py`、`download_sha_v041.sh`、`make_release_v041.sh`、`release_notes_v041.md`、`执行报告_*.md`、`MdDesk-*.zip`、`v050_design.md`（工作区文档）。
+- `git status` 干净：仅遗留未跟踪的发布期产物（build_*/dist_*/日志/辅助脚本）与历史中文笔记 `执行报告_2026-08-17.md`，均不入库。
 
 ## 11. 是否建议批准发布 v0.5.0
 
