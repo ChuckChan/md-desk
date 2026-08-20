@@ -4,6 +4,12 @@ build_v03_smoke/
 dist/
 *.spec
 
+# Organized archives (consolidated historical build dirs / old releases / obsolete helpers)
+build_artifacts/
+release_archive/
+_archive/
+dist_v060/
+
 # Python
 __pycache__/
 *.py[cod]
