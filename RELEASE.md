@@ -81,7 +81,7 @@
 ### 发布元数据
 - **Tag:** `v0.6.0`（annotated tag object `10fe7bc0` → **release commit `146f8ec`**）
 - **GitHub Release:** https://github.com/ChuckChan/md-desk/releases/tag/v0.6.0
-- **正式资产：** `MdDesk-v0.6.0-Windows-x64.zip` — 164,897,910 bytes (~157.2 MB)
+- **正式资产：** `MdDesk-0.6.0-Windows-x64.zip` — 164,897,910 bytes (~157.2 MB)
 - **SHA-256：** `e953cbd61e4a33829b8814f7a8ae42347acb786362b3e1415ab138b1a9f31a8f`
 - **本地冻结 SHA 与 GitHub 下载 SHA 完全一致** ✅（下载后实算 SHA-256 比对）
 

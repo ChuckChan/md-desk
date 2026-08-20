@@ -10,7 +10,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 
 ## 下载与运行
 
-- 前往 **[Releases](https://github.com/ChuckChan/md-desk/releases/latest)** 下载 `MdDesk-v0.5.0-Windows-x64.zip`
+- 前往 **[Releases](https://github.com/ChuckChan/md-desk/releases/latest)** 下载 `MdDesk-0.6.0-Windows-x64.zip`
 - 解压后把**整个文件夹**拷贝到目标机器
 - 双击 `md-desk.exe` 启动
 
@@ -30,6 +30,7 @@ MdDesk 是一个 Windows 桌面 GUI，把各种文档（PDF / Word / Excel / Pow
 - **诊断面板（v0.4.0 新增）**：「诊断」标签页展示每个文件的转换报告（来源、状态、耗时、输出字数）；开启质量检查后还会显示质量提示与错误详情。不渲染 Markdown 正文，可一键打开诊断日志。
 - **转换质量检查（v0.4.0 新增，可选，默认关闭）**：在「高级设置」开启后，对成功的转换做轻量静态检查（空输出 / 异常短 / 文字产出过低 / 乱码 / OCR 失败标记），仅产生提示，绝不修改转换结果或状态。
 - **批量生产力（v0.5.0 新增）**：支持整文件夹导入（递归扫描、去重）；只转换选中的文件；只重试失败的（ERROR / UNSUPPORTED）项；把全部成功结果批量导出到指定目录（重名安全、绝不覆盖源文件）；协作式取消（当前文件正常收尾，其余保持等待）；批次结束展示真实统计（总数 / 成功 / 质量提示 / 失败 / 未执行 / 耗时）。
+- **AI Provider 统一（v0.6.0 新增）**：统一的 AI 配置路径——自带 OpenAI 兼容端点、应用内一键连接测试、OCR 与图片描述独立开关、AI 故障隔离（AI 出错不会中断转换，照常产出 Markdown 并附提示）。API key 仅存 Windows 凭据管理器，绝不落明文。
 
 ## 使用条件 / 前提
 
@@ -60,7 +61,7 @@ python verify_dist_zip.py         # 校验 ZIP（解压/结构/offscreen 启动/
 
 ```bash
 pip install pytest
-pytest tests/ -q                    # 151 个 pytest 用例全过
+pytest tests/ -q                    # 168 个 pytest 用例全过
 python tests/test_file_model.py     # Stage 2 文件模型 12 项（脚本模式）
 python tests/test_audio_stage5.py   # 音频 / 回归 13 项（脚本模式）
 ```
